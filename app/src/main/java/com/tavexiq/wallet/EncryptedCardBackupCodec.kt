@@ -115,7 +115,11 @@ internal object EncryptedCardBackupCodec {
         val spec = PBEKeySpec(password, salt, KDF_ITERATIONS, KEY_BITS)
         return try {
             val bytes = SecretKeyFactory.getInstance(KDF).generateSecret(spec).encoded
-            SecretKeySpec(bytes, "AES")
+            try {
+                SecretKeySpec(bytes, "AES")
+            } finally {
+                bytes.fill(0)
+            }
         } finally {
             spec.clearPassword()
         }
