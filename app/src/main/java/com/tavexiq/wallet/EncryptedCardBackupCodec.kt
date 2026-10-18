@@ -47,7 +47,12 @@ internal object EncryptedCardBackupCodec {
         cipher.updateAAD(aad(FORMAT_VERSION))
 
         val plaintext = CardBackupCodec.encode(cards).toByteArray(StandardCharsets.UTF_8)
-        val ciphertext = cipher.doFinal(plaintext)
+        val ciphertext = try {
+            cipher.doFinal(plaintext)
+        } finally {
+            // Clear the serialized card data as soon as encryption has finished.
+            plaintext.fill(0)
+        }
         return JSONObject()
             .put("app", APP_ID)
             .put("version", FORMAT_VERSION)
@@ -100,6 +105,9 @@ internal object EncryptedCardBackupCodec {
             CardBackupCodec.decode(String(plaintext, StandardCharsets.UTF_8))
         } catch (_: JSONException) {
             throw IllegalArgumentException("De inhoud van de back-up is beschadigd.")
+        } finally {
+            // Minimize the time decrypted card data remains in a mutable byte array.
+            plaintext.fill(0)
         }
     }
 
