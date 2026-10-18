@@ -3,7 +3,7 @@ package com.tavexiq.wallet
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
@@ -52,7 +52,7 @@ private val Muted = Color(0xFF9CB0C8)
 
 data class LoyaltyCard(val id: Long, val name: String, val code: String, val format: String, val favorite: Boolean = false)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { TavexiqApp(this) }
@@ -371,7 +371,7 @@ private fun TavexiqApp(context: Context) {
                         body = "Contactloze bankbetalingen zijn nog niet actief. Hiervoor zijn een goedgekeurde walletpartner, ondersteuning van de bank en vereiste certificering nodig.",
                         note = "Voer nooit een pincode, CVC/CVV of volledige betaalkaartgegevens in deze MVP in."
                     )
-                    else -> IdentityVaultScreen(context)
+                    else -> IdentityVaultLock(context) { IdentityVaultScreen(context) }
                 }
             }
         }
