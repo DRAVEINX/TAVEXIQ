@@ -113,6 +113,27 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingSalt() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("salt")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingNonce() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("nonce")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingCiphertext() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("ciphertext")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
     fun rejectsUnsupportedFormatVersion() {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         root.put("version", 999)
@@ -131,6 +152,11 @@ class EncryptedCardBackupCodecTest {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         root.put("cipher", "AES-CBC")
         EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMalformedJson() {
+        EncryptedCardBackupCodec.decode("{not-json", password)
     }
 
     @Test(expected = IllegalArgumentException::class)
