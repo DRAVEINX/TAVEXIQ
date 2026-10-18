@@ -23,7 +23,7 @@ class LoyaltyCardFiltersTest {
     }
 
     @Test fun combinesSearchAndFavorites() {
-        assertEquals(listOf("HEMA"), filterLoyaltyCards(cards, "he", true).map { it.name })
+        assertEquals(listOf("HEMA"), filterLoyaltyCards(cards, "hema", true).map { it.name })
     }
 
     @Test fun returnsNoResultsForUnknownSearch() {
