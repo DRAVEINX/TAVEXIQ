@@ -57,6 +57,25 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun unsupportedBackupVersionIsRejectedBeforeDecrypting() {
+        val lines = IdentityBackupCodec.encode(sample, password).lines().toMutableList()
+        lines[1] = "999"
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+        }
+    }
+
+    @Test fun emptyEncryptedFieldsAreRejected() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        for (fieldIndex in 2..4) {
+            val lines = encoded.lines().toMutableList()
+            lines[fieldIndex] = ""
+            assertThrows(IllegalArgumentException::class.java) {
+                IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+            }
+        }
+    }
+
     @Test fun shortPasswordIsRejected() {
         assertThrows(IllegalArgumentException::class.java) {
             IdentityBackupCodec.encode(sample, "short".toCharArray())
