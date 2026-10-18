@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -74,6 +76,46 @@ private fun TavexiqApp(context: Context) {
     var favoritesOnly by remember { mutableStateOf(false) }
     var sortAlphabetically by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var backupError by remember { mutableStateOf<String?>(null) }
+    val exportBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val json = CardBackupCodec.encode(cards)
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: error("Het back-upbestand kon niet worden geopend.")
+                output.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
+            }.onSuccess {
+                backupMessage = "Back-up gemaakt. Bewaar het bestand veilig: het bevat je kaartcodes."
+                backupError = null
+            }.onFailure {
+                backupError = "Back-up maken is mislukt. Controleer of er voldoende opslagruimte is."
+            }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: error("Het back-upbestand kon niet worden gelezen.")
+                val imported = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val decoded = CardBackupCodec.decode(imported)
+                storage.saveCards(decoded)
+                decoded
+            }.onSuccess { restored ->
+                cards = restored
+                selected = null
+                backupMessage = "Back-up teruggezet: ${restored.size} kaarten."
+                backupError = null
+            }.onFailure {
+                backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
+            }
+        }
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Cyan, onPrimary = Navy, secondary = Silver,
@@ -173,6 +215,24 @@ private fun TavexiqApp(context: Context) {
                                         label = { Text(if (sortAlphabetically) "Naam A–Z" else "Sorteer A–Z") }
                                     )
                                 }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        enabled = storageError == null,
+                                        onClick = { backupError = null; backupMessage = null; exportBackup.launch("TAVEXIQ-backup.json") },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("Back-up maken") }
+                                    OutlinedButton(
+                                        enabled = storageError == null,
+                                        onClick = { backupError = null; backupMessage = null; importBackup.launch(arrayOf("application/json", "text/json", "text/plain")) },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("Back-up terugzetten") }
+                                }
+                                Text("Back-ups bevatten kaartcodes in leesbare vorm. Bewaar ze op een veilige plek.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                                backupMessage?.let { Text(it, color = Cyan, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+                                backupError?.let { Text(it, color = Color(0xFFFF6B7A), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 val filteredCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
                                 val visibleCards = if (sortAlphabetically) filteredCards.sortedBy { it.name.lowercase() } else filteredCards
                                 if (visibleCards.isEmpty()) {

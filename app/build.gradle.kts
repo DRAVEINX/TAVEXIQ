@@ -39,4 +39,6 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // Provide a real org.json implementation to local JVM unit tests (Android's stubbed API throws).
+    testImplementation("org.json:json:20240303")
 }
