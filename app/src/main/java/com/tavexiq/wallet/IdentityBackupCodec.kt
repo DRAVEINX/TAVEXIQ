@@ -27,12 +27,15 @@ internal object IdentityBackupCodec {
     fun encode(documents: List<IdentityDocument>, password: CharArray): String {
         require(password.size >= 8) { "Gebruik een back-upwachtwoord van minimaal 8 tekens." }
         require(documents.size <= MAX_DOCUMENTS) { "Te veel documentvermeldingen voor een back-up." }
+        require(documents.all { it.id > 0 }) { "Ongeldige document-ID." }
+        require(documents.map { it.id }.distinct().size == documents.size) { "Dubbele document-ID's in de back-up." }
         val items = JSONArray()
         documents.forEach { d ->
             require(d.name.isNotBlank() && d.name.length <= 120) { "Ongeldige documentnaam." }
             require(d.type.length <= 80 && d.issuer.length <= 120 && d.expiryDate.length <= 20 && d.notes.length <= 500) {
                 "Een documentvermelding bevat te lange gegevens."
             }
+            require(IdentityDocumentRules.validateExpiryDate(d.expiryDate)) { "Ongeldige vervaldatum." }
             items.put(JSONObject().put("id", d.id).put("name", d.name).put("type", d.type)
                 .put("issuer", d.issuer).put("expiryDate", d.expiryDate).put("notes", d.notes))
         }
