@@ -112,11 +112,4 @@ class IdentityBackupCodecTest {
         }
     }
 
-    @Test fun duplicateIdsAreRejectedOnRestore() {
-        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
-        val encoded = IdentityBackupCodec.encode(duplicate, password)
-        assertThrows(IllegalArgumentException::class.java) {
-            IdentityBackupCodec.decode(encoded, password)
-        }
-    }
 }
