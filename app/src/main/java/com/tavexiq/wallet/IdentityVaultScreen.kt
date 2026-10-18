@@ -146,7 +146,23 @@ internal fun IdentityVaultScreen(context: Context) {
                                 Text(document.name, color = IdSilver, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(document.type, color = IdCyan, fontSize = 13.sp)
                                 if (document.issuer.isNotBlank()) Text("Uitgever: ${document.issuer}", color = IdMuted, fontSize = 13.sp)
-                                if (document.expiryDate.isNotBlank()) Text("Vervaldatum: ${document.expiryDate}", color = IdMuted, fontSize = 13.sp)
+                                if (document.expiryDate.isNotBlank()) {
+                                    val expiryStatus = IdentityDocumentRules.expiryStatus(document.expiryDate)
+                                    val statusText = when (expiryStatus) {
+                                        IdentityExpiryStatus.EXPIRED -> "VERLOPEN"
+                                        IdentityExpiryStatus.EXPIRING_SOON -> "VERLOOPT BINNEN 30 DAGEN"
+                                        IdentityExpiryStatus.VALID -> "GELDIG"
+                                        IdentityExpiryStatus.INVALID -> "ONGELDIGE DATUM"
+                                        IdentityExpiryStatus.NOT_SET -> ""
+                                    }
+                                    val statusColor = when (expiryStatus) {
+                                        IdentityExpiryStatus.EXPIRED, IdentityExpiryStatus.INVALID -> Color(0xFFFF6B7A)
+                                        IdentityExpiryStatus.EXPIRING_SOON -> Color(0xFFFFC857)
+                                        else -> IdMuted
+                                    }
+                                    Text("Vervaldatum: ${document.expiryDate}", color = IdMuted, fontSize = 13.sp)
+                                    Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                                 if (document.notes.isNotBlank()) Text(document.notes, color = IdMuted, fontSize = 13.sp)
                             }
                             Column {
@@ -197,8 +213,8 @@ internal fun IdentityVaultScreen(context: Context) {
                 TextButton(onClick = {
                     when {
                         name.isBlank() -> error = "Vul een naam in."
-                        expiry.isNotBlank() && !Regex("""\d{2}-\d{2}-\d{4}""").matches(expiry.trim()) ->
-                            error = "Gebruik DD-MM-JJJJ voor de vervaldatum."
+                        !IdentityDocumentRules.validateExpiryDate(expiry) ->
+                            error = "Vul een bestaande datum in als DD-MM-JJJJ (bijv. 31-12-2028)."
                         notes.length > 500 -> error = "Houd notities kort (maximaal 500 tekens)."
                         else -> {
                             val existing = editingDocument
