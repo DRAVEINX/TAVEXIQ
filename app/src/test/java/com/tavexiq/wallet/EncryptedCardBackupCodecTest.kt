@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import java.util.Base64
+import java.util.Locale
 
 class EncryptedCardBackupCodecTest {
     private val password = "correct horse battery".toCharArray()
@@ -36,6 +37,26 @@ class EncryptedCardBackupCodecTest {
             LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
             LoyaltyCard(2L, "Second", "same-code", "CODE_128")
         ), password)
+    }
+
+    @Test
+    fun encryptedDuplicateCodeValidationIsIndependentOfDeviceLocale() {
+        val originalLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+            val duplicateCodes = listOf(
+                LoyaltyCard(1L, "First", "ID-CARD", "QR"),
+                LoyaltyCard(2L, "Second", "id-card", "CODE_128")
+            )
+            try {
+                EncryptedCardBackupCodec.encode(duplicateCodes, password)
+                throw AssertionError("Expected duplicate card codes to be rejected")
+            } catch (_: IllegalArgumentException) {
+                // Expected: validation must not depend on the device locale.
+            }
+        } finally {
+            Locale.setDefault(originalLocale)
+        }
     }
 
     @Test(expected = IllegalArgumentException::class)
