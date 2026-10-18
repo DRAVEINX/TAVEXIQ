@@ -327,10 +327,13 @@ private fun TavexiqApp(context: Context) {
                 confirmButton = {
                     TextButton(onClick = {
                         val validationError = LoyaltyCardRules.validate(name, code)
+                        val existingCard = editingCard
+                        val duplicateCode = hasDuplicateCardCode(cards, code, excludingId = existingCard?.id)
                         if (validationError != null) {
                             error = validationError
+                        } else if (duplicateCode) {
+                            error = "Deze kaartcode staat al in je wallet. Gebruik de bestaande kaart of controleer de code."
                         } else {
-                            val existingCard = editingCard
                             val updatedCards = if (existingCard == null) {
                                 cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
                             } else {
