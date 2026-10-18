@@ -414,7 +414,6 @@ private fun TavexiqApp(context: Context) {
                     TextButton(
                         enabled = backupPassword.length >= 8,
                         onClick = {
-                            backupDialogMode = null
                             if (mode == "export") {
                                 backupDialogMode = null
                                 exportBackup.launch("TAVEXIQ-encrypted-backup.json")
