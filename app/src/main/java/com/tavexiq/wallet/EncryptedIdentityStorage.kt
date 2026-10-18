@@ -84,8 +84,19 @@ internal class EncryptedIdentityStorage(context: Context) {
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        val bytes = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
-        return Base64.encodeToString(cipher.iv + bytes, Base64.NO_WRAP)
+        val plaintext = value.toByteArray(StandardCharsets.UTF_8)
+        val ciphertext = try {
+            cipher.doFinal(plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
+        val combined = cipher.iv + ciphertext
+        return try {
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        } finally {
+            combined.fill(0)
+            ciphertext.fill(0)
+        }
     }
 
     private fun decrypt(value: String): String {
@@ -100,7 +111,14 @@ internal class EncryptedIdentityStorage(context: Context) {
         val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        return String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8)
+        val plaintext = cipher.doFinal(ciphertext)
+        return try {
+            String(plaintext, StandardCharsets.UTF_8)
+        } finally {
+            plaintext.fill(0)
+            ciphertext.fill(0)
+            combined.fill(0)
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {
