@@ -81,18 +81,23 @@ internal object IdentityBackupCodec {
         require(salt.size == SALT_LENGTH && iv.size == IV_LENGTH && encrypted.size <= 1_000_000) {
             "De back-up is ongeldig of te groot."
         }
-        val key = deriveKey(password, salt)
         val plaintext = try {
+            val key = deriveKey(password, salt)
             try {
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
-                cipher.updateAAD(PREFIX.toByteArray(StandardCharsets.UTF_8))
-                cipher.doFinal(encrypted)
-            } catch (_: AEADBadTagException) {
-                throw IllegalArgumentException("Verkeerd back-upwachtwoord of beschadigd bestand.")
+                try {
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+                    cipher.updateAAD(PREFIX.toByteArray(StandardCharsets.UTF_8))
+                    cipher.doFinal(encrypted)
+                } catch (_: AEADBadTagException) {
+                    throw IllegalArgumentException("Verkeerd back-upwachtwoord of beschadigd bestand.")
+                }
+            } finally {
+                key.encoded.fill(0)
             }
         } finally {
-            key.encoded.fill(0)
+            salt.fill(0)
+            iv.fill(0)
             encrypted.fill(0)
         }
         val root = try {
