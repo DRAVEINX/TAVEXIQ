@@ -104,6 +104,17 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun malformedBase64IsRejectedForEachEncryptedField() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        for (fieldIndex in 2..4) {
+            val lines = encoded.lines().toMutableList()
+            lines[fieldIndex] = "not-valid-base64!"
+            assertThrows(IllegalArgumentException::class.java) {
+                IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+            }
+        }
+    }
+
 
     @Test fun tooManyDocumentsAreRejectedBeforeEncoding() {
         val tooMany = (1L..201L).map { IdentityDocument(it, "Document $it", "ID", "", "", "") }
