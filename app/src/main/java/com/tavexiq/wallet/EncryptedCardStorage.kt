@@ -9,6 +9,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -74,7 +75,7 @@ internal class EncryptedCardStorage(context: Context) {
         require(cards.map { it.id }.distinct().size == cards.size) {
             "Dubbele kaart-ID's in de opgeslagen gegevens."
         }
-        require(cards.map { it.code.trim().lowercase() }.distinct().size == cards.size) {
+        require(cards.map { it.code.trim().lowercase(Locale.ROOT) }.distinct().size == cards.size) {
             "Dubbele kaartcodes in de opgeslagen gegevens."
         }
     }
