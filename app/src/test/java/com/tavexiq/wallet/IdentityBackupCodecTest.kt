@@ -149,6 +149,21 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun blankDocumentNameIsRejectedBeforeEncoding() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(name = "   ")), password)
+        }
+    }
+
+    @Test fun oversizedMetadataFieldsAreRejectedBeforeEncoding() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(notes = "x".repeat(501))), password)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(type = "x".repeat(81))), password)
+        }
+    }
+
     @Test fun nonPositiveIdsAreRejectedBeforeEncoding() {
         assertThrows(IllegalArgumentException::class.java) {
             IdentityBackupCodec.encode(listOf(sample.first().copy(id = 0L)), password)
