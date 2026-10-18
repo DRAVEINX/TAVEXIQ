@@ -3,6 +3,7 @@ package com.tavexiq.wallet
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import java.util.Locale
 
 /**
  * Portable backup format. The exported file contains loyalty codes in readable form,
@@ -73,7 +74,7 @@ internal object CardBackupCodec {
         require(cards.map { it.id }.distinct().size == cards.size) {
             "Dubbele kaart-ID's in de $context."
         }
-        val normalizedCodes = cards.map { it.code.trim().lowercase() }
+        val normalizedCodes = cards.map { it.code.trim().lowercase(Locale.ROOT) }
         require(normalizedCodes.distinct().size == normalizedCodes.size) {
             "Dubbele kaartcodes in de $context."
         }
