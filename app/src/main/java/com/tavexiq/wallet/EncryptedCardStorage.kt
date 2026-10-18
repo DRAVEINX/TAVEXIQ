@@ -46,7 +46,8 @@ internal class EncryptedCardStorage(context: Context) {
                 .put("id", card.id)
                 .put("name", card.name)
                 .put("code", card.code)
-                .put("format", card.format))
+                .put("format", card.format)
+                .put("favorite", card.favorite))
         }
         val encrypted = encrypt(array.toString())
         check(prefs.edit().putString(ENCRYPTED_KEY, encrypted).commit()) {
@@ -92,7 +93,7 @@ internal class EncryptedCardStorage(context: Context) {
         val array = JSONArray(json)
         return (0 until array.length()).map { i ->
             val item = array.getJSONObject(i)
-            LoyaltyCard(item.getLong("id"), item.getString("name"), item.getString("code"), item.getString("format"))
+            LoyaltyCard(item.getLong("id"), item.getString("name"), item.getString("code"), item.getString("format"), item.optBoolean("favorite", false))
         }
     }
 
