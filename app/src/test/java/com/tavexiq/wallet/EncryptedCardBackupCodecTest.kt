@@ -50,8 +50,7 @@ class EncryptedCardBackupCodecTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun rejectsTamperedCiphertext() {
-        val backup = EncryptedCardBackupCodec.encode(cards, password)
-        val root = JSONObject(backup)
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         val bytes = Base64.getDecoder().decode(root.getString("ciphertext"))
         bytes[0] = (bytes[0].toInt() xor 1).toByte()
         root.put("ciphertext", Base64.getEncoder().encodeToString(bytes))
@@ -83,6 +82,34 @@ class EncryptedCardBackupCodecTest {
     fun rejectsMalformedCiphertextBase64() {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         root.put("ciphertext", "not-valid-base64!")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsCiphertextShorterThanGcmTag() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("ciphertext", Base64.getEncoder().encodeToString(ByteArray(15)))
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedFormatVersion() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("version", 999)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsChangedKdfIterations() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("iterations", 1)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedCipher() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("cipher", "AES-CBC")
         EncryptedCardBackupCodec.decode(root.toString(), password)
     }
 
