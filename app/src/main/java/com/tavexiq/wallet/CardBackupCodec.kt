@@ -13,14 +13,13 @@ internal object CardBackupCodec {
     private const val MAX_CARDS = 500
 
     fun encode(cards: List<LoyaltyCard>): String {
-        require(cards.size <= MAX_CARDS) { "Te veel kaarten voor een back-up." }
-        validateUniqueCodes(cards)
+        validateCards(cards, "back-up")
         val items = JSONArray()
         cards.forEach { card ->
             items.put(JSONObject()
                 .put("id", card.id)
-                .put("name", card.name)
-                .put("code", card.code)
+                .put("name", card.name.trim())
+                .put("code", card.code.trim())
                 .put("format", card.format)
                 .put("favorite", card.favorite))
         }
@@ -56,15 +55,27 @@ internal object CardBackupCodec {
             require(format == "QR" || format == "CODE_128") { "Onbekend codeformaat in de back-up." }
             LoyaltyCard(id, name, code, format, item.optBoolean("favorite", false))
         }
-        require(cards.map { it.id }.distinct().size == cards.size) { "Dubbele kaart-ID's in de back-up." }
-        validateUniqueCodes(cards)
+        validateCards(cards, "back-up")
         return cards
     }
 
-    private fun validateUniqueCodes(cards: List<LoyaltyCard>) {
+    private fun validateCards(cards: List<LoyaltyCard>, context: String) {
+        require(cards.size <= MAX_CARDS) { "Te veel kaarten voor een back-up." }
+        cards.forEach { card ->
+            require(card.id > 0L) { "Ongeldige kaart-ID in de $context." }
+            require(LoyaltyCardRules.validate(card.name.trim(), card.code.trim()) == null) {
+                "Een kaart in de $context bevat ongeldige gegevens."
+            }
+            require(card.format == "QR" || card.format == "CODE_128") {
+                "Onbekend codeformaat in de $context."
+            }
+        }
+        require(cards.map { it.id }.distinct().size == cards.size) {
+            "Dubbele kaart-ID's in de $context."
+        }
         val normalizedCodes = cards.map { it.code.trim().lowercase() }
         require(normalizedCodes.distinct().size == normalizedCodes.size) {
-            "Dubbele kaartcodes in de back-up."
+            "Dubbele kaartcodes in de $context."
         }
     }
 }
