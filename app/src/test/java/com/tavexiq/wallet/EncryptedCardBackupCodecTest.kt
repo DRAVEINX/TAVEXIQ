@@ -23,6 +23,24 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun roundTripSupportsUnicodeAndSpecialCharacters() {
+        val specialCards = listOf(
+            LoyaltyCard(21L, "Café & Zo", "één-二-🙂", "QR", true),
+            LoyaltyCard(22L, "Winkel \"Noord\"", "A+B/==", "CODE_128", false)
+        )
+        val backup = EncryptedCardBackupCodec.encode(specialCards, password)
+        assertEquals(specialCards, EncryptedCardBackupCodec.decode(backup, password))
+        assertFalse(backup.contains("Café & Zo"))
+        assertFalse(backup.contains("één-二-🙂"))
+    }
+
+    @Test
+    fun emptyWalletCanBeBackedUpAndRestored() {
+        val backup = EncryptedCardBackupCodec.encode(emptyList(), password)
+        assertEquals(emptyList<LoyaltyCard>(), EncryptedCardBackupCodec.decode(backup, password))
+    }
+
+    @Test
     fun eachExportUsesFreshSaltAndNonce() {
         val first = EncryptedCardBackupCodec.encode(cards, password)
         val second = EncryptedCardBackupCodec.encode(cards, password)
@@ -44,8 +62,10 @@ class EncryptedCardBackupCodecTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun rejectsWrongPassword() {
-        val backup = EncryptedCardBackupCodec.encode(cards, password)
-        EncryptedCardBackupCodec.decode(backup, "incorrect password".toCharArray())
+        EncryptedCardBackupCodec.decode(
+            EncryptedCardBackupCodec.encode(cards, password),
+            "incorrect password".toCharArray()
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)
