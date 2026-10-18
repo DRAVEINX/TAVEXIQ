@@ -88,6 +88,7 @@ private fun TavexiqApp(context: Context) {
     var backupDialogMode by remember { mutableStateOf<String?>(null) }
     var legacyBackupPending by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
     var pendingEncryptedBackupJson by remember { mutableStateOf<String?>(null) }
+    var pendingCardRestore by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
     val exportBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -427,23 +428,14 @@ private fun TavexiqApp(context: Context) {
                                     )
                                 }
                                 decoded.onSuccess { restored ->
-                                    runCatching { storage.saveCards(restored) }
-                                        .onSuccess {
-                                            cards = restored
-                                            selected = null
-                                            backupMessage = "Versleutelde back-up teruggezet: ${restored.size} kaarten."
-                                            backupError = null
-                                            pendingEncryptedBackupJson = null
-                                            backupDialogMode = null
-                                        }
-                                        .onFailure {
-                                            backupError = "Herstellen is mislukt. Je huidige kaarten zijn niet gewijzigd."
-                                        }
+                                    pendingCardRestore = restored
+                                    backupError = null
+                                    backupMessage = "Back-up gecontroleerd. Bevestig hieronder om je huidige kaarten te vervangen."
+                                    pendingEncryptedBackupJson = null
+                                    backupDialogMode = null
+                                    backupPassword = ""
                                 }.onFailure {
                                     backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
-                                }
-                                if (decoded.isSuccess) {
-                                    backupPassword = ""
                                 }
                             }
                         }
@@ -451,6 +443,39 @@ private fun TavexiqApp(context: Context) {
                 },
                 dismissButton = {
                     TextButton(onClick = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null }) { Text("Annuleren", color = Silver) }
+                }
+            )
+        }
+
+        pendingCardRestore?.let { restored ->
+            AlertDialog(
+                onDismissRequest = { pendingCardRestore = null },
+                containerColor = Panel,
+                title = { Text("Huidige kaarten vervangen?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "De versleutelde back-up is gecontroleerd. Doorgaan vervangt alle ${cards.size} huidige kaart(en) door ${restored.size} kaart(en). Annuleren laat je huidige kaarten intact.",
+                        color = Silver
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        runCatching { storage.saveCards(restored) }
+                            .onSuccess {
+                                cards = restored
+                                selected = null
+                                backupMessage = "Versleutelde back-up teruggezet: ${restored.size} kaarten."
+                                backupError = null
+                                pendingCardRestore = null
+                            }
+                            .onFailure {
+                                backupError = "Herstellen is mislukt. Je huidige kaarten zijn niet gewijzigd."
+                                pendingCardRestore = null
+                            }
+                    }) { Text("Vervangen en herstellen", color = Cyan) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCardRestore = null }) { Text("Annuleren", color = Silver) }
                 }
             )
         }
