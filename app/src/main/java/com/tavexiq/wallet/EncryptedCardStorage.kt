@@ -44,12 +44,13 @@ internal class EncryptedCardStorage(context: Context) {
 
     @Synchronized
     fun saveCards(cards: List<LoyaltyCard>) {
+        validateCards(cards)
         val array = JSONArray()
         cards.forEach { card ->
             array.put(JSONObject()
                 .put("id", card.id)
-                .put("name", card.name)
-                .put("code", card.code)
+                .put("name", card.name.trim())
+                .put("code", card.code.trim())
                 .put("format", card.format)
                 .put("favorite", card.favorite))
         }
@@ -59,6 +60,23 @@ internal class EncryptedCardStorage(context: Context) {
         }
         // Remove any leftover plaintext only after the encrypted write succeeds.
         removeLegacyPlaintext()
+    }
+
+    private fun validateCards(cards: List<LoyaltyCard>) {
+        require(cards.size <= MAX_CARDS) { "Er zijn te veel opgeslagen kaarten." }
+        cards.forEach { card ->
+            require(card.id > 0L) { "Ongeldige kaart-ID." }
+            require(LoyaltyCardRules.validate(card.name.trim(), card.code.trim()) == null) {
+                "Een kaart bevat ongeldige gegevens."
+            }
+            require(card.format == "QR" || card.format == "CODE_128") { "Onbekend codeformaat." }
+        }
+        require(cards.map { it.id }.distinct().size == cards.size) {
+            "Dubbele kaart-ID's in de opgeslagen gegevens."
+        }
+        require(cards.map { it.code.trim().lowercase() }.distinct().size == cards.size) {
+            "Dubbele kaartcodes in de opgeslagen gegevens."
+        }
     }
 
     private fun removeLegacyPlaintext() {
@@ -133,7 +151,7 @@ internal class EncryptedCardStorage(context: Context) {
         } catch (_: JSONException) {
             throw IllegalStateException("De opgeslagen kaartgegevens zijn ongeldig of beschadigd.")
         }
-        require(cards.map { it.id }.distinct().size == cards.size) { "Dubbele kaart-ID's in de opgeslagen gegevens." }
+        validateCards(cards)
         return cards
     }
 
