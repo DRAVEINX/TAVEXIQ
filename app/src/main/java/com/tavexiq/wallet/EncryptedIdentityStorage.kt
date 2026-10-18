@@ -106,17 +106,24 @@ internal class EncryptedIdentityStorage(context: Context) {
         } catch (_: IllegalArgumentException) {
             throw IllegalStateException("De opgeslagen kluisgegevens zijn ongeldig.")
         }
-        require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) { "De opgeslagen kluisgegevens zijn ongeldig." }
-        val iv = combined.copyOfRange(0, IV_LENGTH)
-        val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        val plaintext = cipher.doFinal(ciphertext)
-        return try {
-            String(plaintext, StandardCharsets.UTF_8)
+        try {
+            require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) { "De opgeslagen kluisgegevens zijn ongeldig." }
+            val iv = combined.copyOfRange(0, IV_LENGTH)
+            val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
+            try {
+                val cipher = Cipher.getInstance(TRANSFORMATION)
+                cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+                val plaintext = cipher.doFinal(ciphertext)
+                return try {
+                    String(plaintext, StandardCharsets.UTF_8)
+                } finally {
+                    plaintext.fill(0)
+                }
+            } finally {
+                iv.fill(0)
+                ciphertext.fill(0)
+            }
         } finally {
-            plaintext.fill(0)
-            ciphertext.fill(0)
             combined.fill(0)
         }
     }
