@@ -429,6 +429,39 @@ private fun TavexiqApp(context: Context) {
             )
         }
 
+        legacyBackupPending?.let { legacyCards ->
+            AlertDialog(
+                onDismissRequest = { legacyBackupPending = null },
+                containerColor = Panel,
+                title = { Text("Oudere back-up herstellen?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Dit is een oudere, niet-versleutelde TAVEXIQ-back-up met " + legacyCards.size + " kaarten. De kaartcodes staan leesbaar in het bestand. Als je doorgaat, worden je huidige kaarten vervangen. Herstel alleen als je dit bestand vertrouwt.",
+                        color = Silver
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        runCatching { storage.saveCards(legacyCards) }
+                            .onSuccess {
+                                cards = legacyCards
+                                selected = null
+                                backupMessage = "Oudere back-up hersteld: " + legacyCards.size + " kaarten. Maak daarna bij voorkeur een nieuwe versleutelde back-up."
+                                backupError = null
+                                legacyBackupPending = null
+                            }
+                            .onFailure {
+                                backupError = "Herstellen is mislukt. Je huidige kaarten zijn niet gewijzigd."
+                                legacyBackupPending = null
+                            }
+                    }) { Text("Herstellen", color = Cyan) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { legacyBackupPending = null }) { Text("Annuleren", color = Silver) }
+                }
+            )
+        }
+
         if (showAdd) {
             AlertDialog(
                 onDismissRequest = { showAdd = false; editingCard = null },
