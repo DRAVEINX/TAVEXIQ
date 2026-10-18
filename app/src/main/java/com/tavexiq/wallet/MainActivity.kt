@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.EnumMap
 
 private val Navy = Color(0xFF071426)
@@ -54,8 +52,14 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun TavexiqApp(context: Context) {
-    val prefs = remember { context.getSharedPreferences("tavexiq_local", Context.MODE_PRIVATE) }
-    var cards by remember { mutableStateOf(loadCards(prefs)) }
+    val storage = remember { EncryptedCardStorage(context) }
+    var storageError by remember { mutableStateOf<String?>(null) }
+    var cards by remember {
+        mutableStateOf(runCatching { storage.loadCards() }.getOrElse {
+            storageError = "Je opgeslagen kaarten konden niet veilig worden gelezen. De gegevens zijn niet overschreven. Controleer de appgegevens of herstel een back-up."
+            emptyList()
+        })
+    }
     var selected by remember { mutableStateOf<LoyaltyCard?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -98,6 +102,12 @@ private fun TavexiqApp(context: Context) {
             }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
+                if (storageError != null) {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF3A2028)),
+                        shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
+                        Text(storageError!!, color = Silver, modifier = Modifier.padding(14.dp))
+                    }
+                }
                 when (tab) {
                     0 -> if (selected != null) {
                         CodeDetail(selected!!, onBack = { selected = null })
@@ -107,7 +117,8 @@ private fun TavexiqApp(context: Context) {
                                 Text("Mijn kaarten", fontSize = 23.sp, fontWeight = FontWeight.Bold)
                                 Text(cards.size.toString() + " opgeslagen kaarten", color = Muted)
                             }
-                            Button(onClick = { name = ""; code = ""; format = "QR"; error = ""; showAdd = true },
+                            Button(enabled = storageError == null,
+                                onClick = { name = ""; code = ""; format = "QR"; error = ""; showAdd = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
                                 Icon(Icons.Default.Add, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
@@ -123,7 +134,7 @@ private fun TavexiqApp(context: Context) {
                                     Spacer(Modifier.height(5.dp))
                                     Text("Voeg een klantenkaart toe en toon de code bij de kassa.", color = Muted)
                                     Spacer(Modifier.height(14.dp))
-                                    Button(onClick = { showAdd = true }, colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
+                                    Button(enabled = storageError == null, onClick = { showAdd = true }, colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
                                         Text("Eerste kaart toevoegen")
                                     }
                                 }
@@ -146,8 +157,10 @@ private fun TavexiqApp(context: Context) {
                                                 Text(card.format + " • " + LoyaltyCardRules.maskCode(card.code), color = Muted, fontSize = 13.sp)
                                             }
                                             IconButton(onClick = {
-                                                cards = cards.filterNot { it.id == card.id }
-                                                saveCards(prefs, cards)
+                                                val updatedCards = cards.filterNot { it.id == card.id }
+                                                runCatching { storage.saveCards(updatedCards) }
+                                                    .onSuccess { cards = updatedCards }
+                                                    .onFailure { storageError = "Opslaan is mislukt; de bestaande kaartgegevens zijn behouden." }
                                             }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
                                         }
                                     }
@@ -196,9 +209,13 @@ private fun TavexiqApp(context: Context) {
                         if (validationError != null) {
                             error = validationError
                         } else {
-                            cards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
-                            saveCards(prefs, cards)
-                            showAdd = false
+                            val updatedCards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
+                            runCatching { storage.saveCards(updatedCards) }
+                                .onSuccess {
+                                    cards = updatedCards
+                                    showAdd = false
+                                }
+                                .onFailure { error = "Veilig opslaan is mislukt. Je bestaande kaarten zijn behouden." }
                         }
                     }) { Text("Opslaan", color = Cyan) }
                 },
@@ -269,20 +286,4 @@ private fun createCodeBitmap(content: String, format: String): Bitmap? = try {
         }
     }
 } catch (_: Exception) { null }
-
-private fun loadCards(prefs: android.content.SharedPreferences): List<LoyaltyCard> = try {
-    val array = JSONArray(prefs.getString("cards", "[]"))
-    (0 until array.length()).map { i ->
-        val item = array.getJSONObject(i)
-        LoyaltyCard(item.getLong("id"), item.getString("name"), item.getString("code"), item.getString("format"))
-    }
-} catch (_: Exception) { emptyList() }
-
-private fun saveCards(prefs: android.content.SharedPreferences, cards: List<LoyaltyCard>) {
-    val array = JSONArray()
-    cards.forEach { card ->
-        array.put(JSONObject().put("id", card.id).put("name", card.name).put("code", card.code).put("format", card.format))
-    }
-    prefs.edit().putString("cards", array.toString()).apply()
-}
 
