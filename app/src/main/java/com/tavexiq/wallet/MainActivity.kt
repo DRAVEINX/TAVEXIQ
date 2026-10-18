@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsTransit
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Star
@@ -64,6 +65,7 @@ private fun TavexiqApp(context: Context) {
     }
     var selected by remember { mutableStateOf<LoyaltyCard?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    var editingCard by remember { mutableStateOf<LoyaltyCard?>(null) }
     var name by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var format by remember { mutableStateOf("QR") }
@@ -122,7 +124,7 @@ private fun TavexiqApp(context: Context) {
                                 Text(cards.size.toString() + " opgeslagen kaarten", color = Muted)
                             }
                             Button(enabled = storageError == null,
-                                onClick = { name = ""; code = ""; format = "QR"; error = ""; showAdd = true },
+                                onClick = { editingCard = null; name = ""; code = ""; format = "QR"; error = ""; showAdd = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
                                 Icon(Icons.Default.Add, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
@@ -181,6 +183,16 @@ private fun TavexiqApp(context: Context) {
                                                         Text(card.format + " • " + LoyaltyCardRules.maskCode(card.code), color = Muted, fontSize = 13.sp)
                                                     }
                                                     IconButton(enabled = storageError == null, onClick = {
+                                                        editingCard = card
+                                                        name = card.name
+                                                        code = card.code
+                                                        format = card.format
+                                                        error = ""
+                                                        showAdd = true
+                                                    }) {
+                                                        Icon(Icons.Default.Edit, contentDescription = "Kaart bewerken", tint = Cyan)
+                                                    }
+                                                    IconButton(enabled = storageError == null, onClick = {
                                                         val updatedCards = cards.map { if (it.id == card.id) it.copy(favorite = !it.favorite) else it }
                                                         runCatching { storage.saveCards(updatedCards) }
                                                             .onSuccess { cards = updatedCards }
@@ -222,9 +234,9 @@ private fun TavexiqApp(context: Context) {
 
         if (showAdd) {
             AlertDialog(
-                onDismissRequest = { showAdd = false },
+                onDismissRequest = { showAdd = false; editingCard = null },
                 containerColor = Panel,
-                title = { Text("Klantenkaart toevoegen", fontWeight = FontWeight.Bold) },
+                title = { Text(if (editingCard == null) "Klantenkaart toevoegen" else "Klantenkaart bewerken", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(value = name, onValueChange = { name = it; error = "" }, label = { Text("Winkel / kaartnaam") }, singleLine = true)
@@ -245,17 +257,28 @@ private fun TavexiqApp(context: Context) {
                         if (validationError != null) {
                             error = validationError
                         } else {
-                            val updatedCards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
+                            val existingCard = editingCard
+                            val updatedCards = if (existingCard == null) {
+                                cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
+                            } else {
+                                cards.map { card ->
+                                    if (card.id == existingCard.id) card.copy(name = name.trim(), code = code.trim(), format = format) else card
+                                }
+                            }
                             runCatching { storage.saveCards(updatedCards) }
                                 .onSuccess {
                                     cards = updatedCards
+                                    if (existingCard != null && selected?.id == existingCard.id) {
+                                        selected = updatedCards.firstOrNull { it.id == existingCard.id }
+                                    }
                                     showAdd = false
+                                    editingCard = null
                                 }
                                 .onFailure { error = "Veilig opslaan is mislukt. Je bestaande kaarten zijn behouden." }
                         }
                     }) { Text("Opslaan", color = Cyan) }
                 },
-                dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Annuleren", color = Silver) } }
+                dismissButton = { TextButton(onClick = { showAdd = false; editingCard = null }) { Text("Annuleren", color = Silver) } }
             )
         }
     }
