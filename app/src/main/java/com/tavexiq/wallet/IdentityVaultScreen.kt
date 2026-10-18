@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,6 +57,8 @@ internal fun IdentityVaultScreen(context: Context) {
     }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<IdentityDocument?>(null) }
+    var editingDocument by remember { mutableStateOf<IdentityDocument?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Identiteitsbewijs") }
     var issuer by remember { mutableStateOf("") }
@@ -71,6 +75,7 @@ internal fun IdentityVaultScreen(context: Context) {
             Button(
                 enabled = !storageFailed,
                 onClick = {
+                    editingDocument = null
                     name = ""; type = "Identiteitsbewijs"; issuer = ""; expiry = ""; notes = ""; error = null; showAdd = true
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = IdCyan, contentColor = Color(0xFF071426))
@@ -110,8 +115,27 @@ internal fun IdentityVaultScreen(context: Context) {
                 Text("Voeg een documentvermelding toe, bijvoorbeeld je paspoort of rijbewijs, met optionele vervaldatum.", color = IdMuted)
             }
         } else {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                singleLine = true,
+                label = { Text("Zoek in je ID-kluis") },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "Zoekopdracht wissen")
+                    }
+                }
+            )
+            val visibleDocuments = documents.filter { document ->
+                listOf(document.name, document.type, document.issuer, document.expiryDate, document.notes)
+                    .any { it.contains(searchQuery.trim(), ignoreCase = true) }
+            }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                items(documents, key = { it.id }) { document ->
+                if (visibleDocuments.isEmpty()) {
+                    item { Text("Geen documenten gevonden. Probeer een andere zoekterm.", color = IdMuted, modifier = Modifier.padding(vertical = 20.dp)) }
+                }
+                items(visibleDocuments, key = { it.id }) { document ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -125,8 +149,22 @@ internal fun IdentityVaultScreen(context: Context) {
                                 if (document.expiryDate.isNotBlank()) Text("Vervaldatum: ${document.expiryDate}", color = IdMuted, fontSize = 13.sp)
                                 if (document.notes.isNotBlank()) Text(document.notes, color = IdMuted, fontSize = 13.sp)
                             }
-                            IconButton(onClick = { pendingDelete = document }) {
-                                Icon(Icons.Default.Delete, contentDescription = "${document.name} verwijderen", tint = IdMuted)
+                            Column {
+                                IconButton(onClick = {
+                                    editingDocument = document
+                                    name = document.name
+                                    type = document.type
+                                    issuer = document.issuer
+                                    expiry = document.expiryDate
+                                    notes = document.notes
+                                    error = null
+                                    showAdd = true
+                                }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Document bewerken", tint = IdCyan)
+                                }
+                                IconButton(onClick = { pendingDelete = document }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Document verwijderen", tint = IdMuted)
+                                }
                             }
                         }
                     }
@@ -137,9 +175,9 @@ internal fun IdentityVaultScreen(context: Context) {
 
     if (showAdd) {
         AlertDialog(
-            onDismissRequest = { showAdd = false },
+            onDismissRequest = { showAdd = false; editingDocument = null },
             containerColor = IdPanel,
-            title = { Text("Document toevoegen", color = IdSilver, fontWeight = FontWeight.Bold) },
+            title = { Text(if (editingDocument == null) "Document toevoegen" else "Document bewerken", color = IdSilver, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = name, onValueChange = { name = it; error = null }, label = { Text("Naam, bijv. Paspoort") }, singleLine = true)
@@ -163,22 +201,25 @@ internal fun IdentityVaultScreen(context: Context) {
                             error = "Gebruik DD-MM-JJJJ voor de vervaldatum."
                         notes.length > 500 -> error = "Houd notities kort (maximaal 500 tekens)."
                         else -> {
-                            val updated = documents + IdentityDocument(
-                                id = System.currentTimeMillis(),
+                            val existing = editingDocument
+                            val replacement = IdentityDocument(
+                                id = existing?.id ?: System.currentTimeMillis(),
                                 name = name.trim(),
                                 type = type,
                                 issuer = issuer.trim(),
                                 expiryDate = expiry.trim(),
                                 notes = notes.trim()
                             )
+                            val updated = if (existing == null) documents + replacement
+                                else documents.map { if (it.id == existing.id) replacement else it }
                             runCatching { storage.save(updated) }
-                                .onSuccess { documents = updated; showAdd = false; error = null }
+                                .onSuccess { documents = updated; showAdd = false; editingDocument = null; error = null }
                                 .onFailure { error = "Veilig opslaan is mislukt. De bestaande kluis is behouden." }
                         }
                     }
                 }) { Text("Veilig opslaan", color = IdCyan) }
             },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Annuleren", color = IdSilver) } }
+            dismissButton = { TextButton(onClick = { showAdd = false; editingDocument = null }) { Text("Annuleren", color = IdSilver) } }
         )
     }
 
