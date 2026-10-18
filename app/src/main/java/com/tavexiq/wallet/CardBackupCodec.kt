@@ -14,6 +14,7 @@ internal object CardBackupCodec {
 
     fun encode(cards: List<LoyaltyCard>): String {
         require(cards.size <= MAX_CARDS) { "Te veel kaarten voor een back-up." }
+        validateUniqueCodes(cards)
         val items = JSONArray()
         cards.forEach { card ->
             items.put(JSONObject()
@@ -56,6 +57,14 @@ internal object CardBackupCodec {
             LoyaltyCard(id, name, code, format, item.optBoolean("favorite", false))
         }
         require(cards.map { it.id }.distinct().size == cards.size) { "Dubbele kaart-ID's in de back-up." }
+        validateUniqueCodes(cards)
         return cards
+    }
+
+    private fun validateUniqueCodes(cards: List<LoyaltyCard>) {
+        val normalizedCodes = cards.map { it.code.trim().lowercase() }
+        require(normalizedCodes.distinct().size == normalizedCodes.size) {
+            "Dubbele kaartcodes in de back-up."
+        }
     }
 }
