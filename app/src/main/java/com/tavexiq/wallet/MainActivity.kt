@@ -79,6 +79,7 @@ private fun TavexiqApp(context: Context) {
     var searchQuery by remember { mutableStateOf("") }
     var favoritesOnly by remember { mutableStateOf(false) }
     var sortAlphabetically by remember { mutableStateOf(false) }
+    var sortNewestFirst by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
@@ -222,8 +223,19 @@ private fun TavexiqApp(context: Context) {
                                     )
                                     FilterChip(
                                         selected = sortAlphabetically,
-                                        onClick = { sortAlphabetically = !sortAlphabetically },
+                                        onClick = {
+                                            sortAlphabetically = !sortAlphabetically
+                                            if (sortAlphabetically) sortNewestFirst = false
+                                        },
                                         label = { Text(if (sortAlphabetically) "Naam A–Z" else "Sorteer A–Z") }
+                                    )
+                                    FilterChip(
+                                        selected = sortNewestFirst,
+                                        onClick = {
+                                            sortNewestFirst = !sortNewestFirst
+                                            if (sortNewestFirst) sortAlphabetically = false
+                                        },
+                                        label = { Text("Nieuwste eerst") }
                                     )
                                 }
                                 Row(
@@ -245,7 +257,11 @@ private fun TavexiqApp(context: Context) {
                                 backupMessage?.let { Text(it, color = Cyan, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 backupError?.let { Text(it, color = Color(0xFFFF6B7A), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 val filteredCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
-                                val visibleCards = if (sortAlphabetically) filteredCards.sortedBy { it.name.lowercase() } else filteredCards
+                                val visibleCards = when {
+                                    sortAlphabetically -> filteredCards.sortedBy { it.name.lowercase() }
+                                    sortNewestFirst -> filteredCards.sortedByDescending { it.id }
+                                    else -> filteredCards
+                                }
                                  if (visibleCards.isEmpty()) {
                                      Column(
                                          modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp),
