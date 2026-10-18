@@ -44,6 +44,19 @@ class CardBackupCodecTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
+    fun rejectsDuplicateCodesIgnoringCase() {
+        CardBackupCodec.decode("""{"app":"TAVEXIQ","version":1,"cards":[{"id":1,"name":"First","code":"ABC123","format":"QR"},{"id":2,"name":"Second","code":"abc123","format":"QR"}]}""")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun refusesToExportDuplicateCodes() {
+        CardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
+            LoyaltyCard(2L, "Second", "same-code", "CODE_128")
+        ))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
     fun rejectsNonPositiveCardId() {
         CardBackupCodec.decode("""{"app":"TAVEXIQ","version":1,"cards":[{"id":0,"name":"Test","code":"abc123","format":"QR"}]}""")
     }
