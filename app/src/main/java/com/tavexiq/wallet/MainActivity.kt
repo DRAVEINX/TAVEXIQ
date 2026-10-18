@@ -263,6 +263,8 @@ private fun TavexiqApp(context: Context) {
                                         backupError = null
                                         backupMessage = null
                                         backupPassword = ""
+                                        pendingEncryptedBackupJson = null
+                                        legacyBackupPending = null
                                         importBackup.launch(arrayOf("application/json", "text/json", "text/plain"))
                                     },
                                         modifier = Modifier.weight(1f)
