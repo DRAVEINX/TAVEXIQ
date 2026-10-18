@@ -68,6 +68,7 @@ private fun TavexiqApp(context: Context) {
         })
     }
     var selected by remember { mutableStateOf<LoyaltyCard?>(null) }
+    var pendingDelete by remember { mutableStateOf<LoyaltyCard?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<LoyaltyCard?>(null) }
     var name by remember { mutableStateOf("") }
@@ -278,11 +279,8 @@ private fun TavexiqApp(context: Context) {
                                                             tint = if (card.favorite) Cyan else Muted)
                                                     }
                                                     IconButton(enabled = storageError == null, onClick = {
-                                                        val updatedCards = cards.filterNot { it.id == card.id }
-                                                        runCatching { storage.saveCards(updatedCards) }
-                                                            .onSuccess { cards = updatedCards }
-                                                            .onFailure { storageError = "Opslaan is mislukt; de bestaande kaartgegevens zijn behouden." }
-                                                    }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
+                                                         pendingDelete = card
+                                                     }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
                                                 }
                                             }
                                         }
@@ -357,6 +355,32 @@ private fun TavexiqApp(context: Context) {
                     }) { Text("Opslaan", color = Cyan) }
                 },
                 dismissButton = { TextButton(onClick = { showAdd = false; editingCard = null }) { Text("Annuleren", color = Silver) } }
+            )
+        }
+        pendingDelete?.let { cardToDelete ->
+            AlertDialog(
+                onDismissRequest = { pendingDelete = null },
+                containerColor = Panel,
+                title = { Text("Kaart verwijderen?", fontWeight = FontWeight.Bold) },
+                text = { Text("Weet je zeker dat je deze kaart wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val updatedCards = cards.filterNot { it.id == cardToDelete.id }
+                        runCatching { storage.saveCards(updatedCards) }
+                            .onSuccess {
+                                cards = updatedCards
+                                if (selected?.id == cardToDelete.id) selected = null
+                                pendingDelete = null
+                            }
+                            .onFailure {
+                                storageError = "Verwijderen is mislukt; de bestaande kaartgegevens zijn behouden."
+                                pendingDelete = null
+                            }
+                    }) { Text("Verwijderen", color = Color(0xFFFF6B7A)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDelete = null }) { Text("Annuleren", color = Silver) }
+                }
             )
         }
     }
