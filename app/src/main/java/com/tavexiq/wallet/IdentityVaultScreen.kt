@@ -1,6 +1,9 @@
 package com.tavexiq.wallet
 
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,6 +69,44 @@ internal fun IdentityVaultScreen(context: Context) {
     var expiry by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var backupMode by remember { mutableStateOf<String?>(null) }
+    var backupPassword by remember { mutableStateOf("") }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var backupError by remember { mutableStateOf<String?>(null) }
+
+    val exportIdentityBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                val encrypted = IdentityBackupCodec.encode(documents, backupPassword.toCharArray())
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(encrypted) }
+                    ?: throw IllegalStateException("Bestand kon niet worden geopend.")
+            }.onSuccess {
+                backupMessage = "Versleutelde ID-back-up gemaakt. Bewaar ook je back-upwachtwoord."
+                backupError = null
+            }.onFailure { backupError = it.message ?: "ID-back-up maken is mislukt." }
+        }
+        backupPassword = ""
+        backupMode = null
+    }
+    val importIdentityBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                val backup = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: throw IllegalStateException("Bestand kon niet worden gelezen.")
+                require(backup.length <= 1_500_000) { "Het back-upbestand is te groot." }
+                val restored = IdentityBackupCodec.decode(backup, backupPassword.toCharArray())
+                storage.save(restored)
+                restored
+            }.onSuccess {
+                documents = it
+                storageFailed = false
+                backupMessage = "ID-kluis hersteld: " + it.size + " documentvermelding(en)."
+                backupError = null
+            }.onFailure { backupError = it.message ?: "Terugzetten mislukt; de huidige kluis is behouden." }
+        }
+        backupPassword = ""
+        backupMode = null
+    }
 
     Column(Modifier.fillMaxSize().padding(top = 14.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -84,6 +126,20 @@ internal fun IdentityVaultScreen(context: Context) {
                 Text(" Toevoegen")
             }
         }
+        Spacer(Modifier.size(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !storageFailed, modifier = Modifier.weight(1f),
+                onClick = { backupPassword = ""; backupError = null; backupMode = "export" }) {
+                Text("Versleutelde back-up")
+            }
+            OutlinedButton(enabled = !storageFailed, modifier = Modifier.weight(1f),
+                onClick = { backupPassword = ""; backupError = null; backupMode = "import" }) {
+                Text("Back-up herstellen")
+            }
+        }
+        Text("ID-back-ups zijn met een eigen wachtwoord versleuteld. Bewaar dat wachtwoord veilig; het kan niet worden hersteld.", color = IdMuted, fontSize = 11.sp)
+        backupMessage?.let { Text(it, color = IdCyan, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+        backupError?.let { Text(it, color = Color(0xFFFF6B7A), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
         Spacer(Modifier.size(12.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -187,6 +243,38 @@ internal fun IdentityVaultScreen(context: Context) {
                 }
             }
         }
+    }
+
+    backupMode?.let { mode ->
+        AlertDialog(
+            onDismissRequest = { backupMode = null; backupPassword = "" },
+            containerColor = IdPanel,
+            title = { Text(if (mode == "export") "ID-kluis veilig exporteren" else "ID-kluis herstellen", color = IdSilver) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (mode == "export")
+                        "Kies een wachtwoord van minimaal 8 tekens. Alleen documentmetadata wordt opgenomen; geen scans of officiële identiteitsgegevens."
+                        else "Voer het wachtwoord in waarmee deze back-up is gemaakt. Herstellen vervangt de huidige ID-kluis.",
+                        color = IdMuted)
+                    OutlinedTextField(value = backupPassword, onValueChange = { backupPassword = it },
+                        label = { Text("Back-upwachtwoord") }, singleLine = true)
+                    backupError?.let { Text(it, color = Color(0xFFFF6B7A)) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (backupPassword.length < 8) backupError = "Gebruik minimaal 8 tekens voor het back-upwachtwoord."
+                    else {
+                        backupError = null
+                        if (mode == "export") exportIdentityBackup.launch("TAVEXIQ-ID-kluis-backup.txt")
+                        else importIdentityBackup.launch(arrayOf("text/plain", "application/octet-stream", "application/json"))
+                    }
+                }) { Text(if (mode == "export") "Bestand opslaan" else "Bestand kiezen", color = IdCyan) }
+            },
+            dismissButton = {
+                TextButton(onClick = { backupMode = null; backupPassword = "" }) { Text("Annuleren", color = IdSilver) }
+            }
+        )
     }
 
     if (showAdd) {
