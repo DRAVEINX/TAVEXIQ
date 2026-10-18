@@ -78,10 +78,10 @@ internal object IdentityBackupCodec {
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("De back-up bevat ongeldige gecodeerde gegevens.")
         }
-        require(salt.size == SALT_LENGTH && iv.size == IV_LENGTH && encrypted.size <= 1_000_000) {
-            "De back-up is ongeldig of te groot."
-        }
         val plaintext = try {
+            require(salt.size == SALT_LENGTH && iv.size == IV_LENGTH && encrypted.size <= 1_000_000) {
+                "De back-up is ongeldig of te groot."
+            }
             val key = deriveKey(password, salt)
             try {
                 try {
