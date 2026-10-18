@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.Edit
@@ -199,7 +200,14 @@ private fun TavexiqApp(context: Context) {
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                                     singleLine = true,
                                     label = { Text("Zoek een klantenkaart") },
-                                    placeholder = { Text("Naam van de winkel") }
+                                    placeholder = { Text("Naam van de winkel") },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Default.Close, contentDescription = "Zoekopdracht wissen", tint = Muted)
+                                            }
+                                        }
+                                    }
                                 )
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
