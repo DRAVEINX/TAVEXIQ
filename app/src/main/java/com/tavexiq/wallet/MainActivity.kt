@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -381,6 +383,7 @@ private fun FeatureNotice(icon: @Composable () -> Unit, title: String, body: Str
 
 @Composable
 private fun CodeDetail(card: LoyaltyCard, onBack: () -> Unit) {
+    var showFullCode by remember(card.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← Terug", color = Cyan) }
@@ -402,9 +405,31 @@ private fun CodeDetail(card: LoyaltyCard, onBack: () -> Unit) {
         Spacer(Modifier.height(18.dp))
         Text(card.name, color = Silver, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Text(card.code, color = Muted, fontSize = 13.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                if (showFullCode) card.code else LoyaltyCardRules.maskCode(card.code),
+                color = Muted,
+                fontSize = 14.sp
+            )
+            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = { showFullCode = !showFullCode }) {
+                Icon(
+                    if (showFullCode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (showFullCode) "Kaartcode verbergen" else "Kaartcode tonen",
+                    tint = Cyan
+                )
+            }
+        }
+        Text(
+            if (showFullCode) "Je kaartcode is zichtbaar op het scherm." else "Je kaartcode is verborgen. Tik op het oog om hem te tonen.",
+            color = Muted,
+            fontSize = 12.sp
+        )
         Spacer(Modifier.height(12.dp))
-        Text("Laat deze code bij de kassa scannen.", color = Muted)
+        Text("Laat de code hierboven of de barcode bij de kassa scannen.", color = Muted)
     }
 }
 
