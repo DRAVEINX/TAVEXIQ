@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class CardBackupCodecTest {
     @Test
@@ -61,6 +62,27 @@ class CardBackupCodecTest {
             LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
             LoyaltyCard(2L, "Second", "same-code", "CODE_128")
         ))
+    }
+
+
+    @Test
+    fun duplicateCodeValidationIsIndependentOfDeviceLocale() {
+        val previousLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale("tr", "TR"))
+            val cards = listOf(
+                LoyaltyCard(1L, "First", "ID-CARD", "QR"),
+                LoyaltyCard(2L, "Second", "id-card", "CODE_128")
+            )
+            try {
+                CardBackupCodec.encode(cards)
+                throw AssertionError("Expected duplicate codes to be rejected")
+            } catch (_: IllegalArgumentException) {
+                // Duplicate detection must remain case-insensitive in every locale.
+            }
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
     }
 
     @Test(expected = IllegalArgumentException::class)
