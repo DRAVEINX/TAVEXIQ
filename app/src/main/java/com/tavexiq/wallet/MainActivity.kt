@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -152,6 +153,8 @@ private fun TavexiqApp(context: Context) {
                         icon = { Icon(Icons.Default.DirectionsTransit, contentDescription = null) }, label = { Text("OV") })
                     NavigationBarItem(selected = tab == 2, onClick = { tab = 2; selected = null },
                         icon = { Icon(Icons.Default.Security, contentDescription = null) }, label = { Text("Betalen") })
+                    NavigationBarItem(selected = tab == 3, onClick = { tab = 3; selected = null },
+                        icon = { Icon(Icons.Default.Badge, contentDescription = null) }, label = { Text("ID-kluis") })
                 }
             }
         ) { padding ->
@@ -362,12 +365,13 @@ private fun TavexiqApp(context: Context) {
                         body = "De officiële OV-chipkaart- en OVpay-integratie is nog niet gekoppeld. Hiervoor is ondersteuning en toestemming van de vervoerder nodig.",
                         note = "TAVEXIQ kopieert of emuleert geen fysieke OV-kaart. Bewaar je fysieke kaart."
                     )
-                    else -> FeatureNotice(
+                    2 -> FeatureNotice(
                         icon = { Icon(Icons.Default.Security, contentDescription = null, tint = Cyan, modifier = Modifier.size(42.dp)) },
                         title = "Contactloos betalen",
                         body = "Contactloze bankbetalingen zijn nog niet actief. Hiervoor zijn een goedgekeurde walletpartner, ondersteuning van de bank en vereiste certificering nodig.",
                         note = "Voer nooit een pincode, CVC/CVV of volledige betaalkaartgegevens in deze MVP in."
                     )
+                    else -> IdentityVaultScreen(context)
                 }
             }
         }
