@@ -63,6 +63,28 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun shortPasswordIsRejectedOnRestore() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(encoded, "short".toCharArray())
+        }
+    }
+
+    @Test fun oversizedBackupIsRejectedBeforeParsing() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode("x".repeat(1_500_001), password)
+        }
+    }
+
+    @Test fun malformedBase64FieldsAreRejectedClearly() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        val lines = encoded.lines().toMutableList()
+        lines[2] = "not-valid-base64!"
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+        }
+    }
+
     @Test fun tooManyDocumentsAreRejectedBeforeEncoding() {
         val tooMany = (1L..201L).map { IdentityDocument(it, "Document $it", "ID", "", "", "") }
         assertThrows(IllegalArgumentException::class.java) {
