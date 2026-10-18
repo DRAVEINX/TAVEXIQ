@@ -390,7 +390,7 @@ private fun TavexiqApp(context: Context) {
 
         backupDialogMode?.let { mode ->
             AlertDialog(
-                onDismissRequest = { backupDialogMode = null; backupPassword = "" },
+                onDismissRequest = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null },
                 containerColor = Panel,
                 title = { Text(if (mode == "export") "Back-up versleutelen" else "Back-up ontsleutelen", fontWeight = FontWeight.Bold) },
                 text = {
@@ -448,7 +448,7 @@ private fun TavexiqApp(context: Context) {
                     ) { Text(if (mode == "export") "Versleutelen en opslaan" else "Bestand kiezen en herstellen", color = Cyan) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { backupDialogMode = null; backupPassword = "" }) { Text("Annuleren", color = Silver) }
+                    TextButton(onClick = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null }) { Text("Annuleren", color = Silver) }
                 }
             )
         }
