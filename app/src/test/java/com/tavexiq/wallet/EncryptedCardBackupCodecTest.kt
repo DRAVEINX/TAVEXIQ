@@ -23,6 +23,30 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun encryptedExportTrimsNameAndCodeWhitespace() {
+        val input = listOf(LoyaltyCard(1L, "  HEMA  ", "  ABC123  ", "QR", true))
+        val backup = EncryptedCardBackupCodec.encode(input, password)
+        assertEquals(listOf(LoyaltyCard(1L, "HEMA", "ABC123", "QR", true)),
+            EncryptedCardBackupCodec.decode(backup, password))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun encryptedExportRejectsDuplicateCodesIgnoringCase() {
+        EncryptedCardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
+            LoyaltyCard(2L, "Second", "same-code", "CODE_128")
+        ), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun encryptedExportRejectsDuplicateIds() {
+        EncryptedCardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "CODE-ONE", "QR"),
+            LoyaltyCard(1L, "Second", "CODE-TWO", "QR")
+        ), password)
+    }
+
+    @Test
     fun roundTripSupportsUnicodeAndSpecialCharacters() {
         val specialCards = listOf(
             LoyaltyCard(21L, "Café & Zo", "één-二-🙂", "QR", true),
