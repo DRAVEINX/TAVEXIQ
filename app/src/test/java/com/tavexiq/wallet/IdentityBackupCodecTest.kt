@@ -92,11 +92,23 @@ class IdentityBackupCodecTest {
         }
     }
 
-    @Test fun invalidExpiryDateIsRejectedOnRestore() {
+    @Test fun invalidExpiryDateIsRejectedBeforeEncoding() {
         val invalidDate = listOf(sample.first().copy(expiryDate = "31-02-2030"))
-        val encoded = IdentityBackupCodec.encode(invalidDate, password)
         assertThrows(IllegalArgumentException::class.java) {
-            IdentityBackupCodec.decode(encoded, password)
+            IdentityBackupCodec.encode(invalidDate, password)
+        }
+    }
+
+    @Test fun nonPositiveIdsAreRejectedBeforeEncoding() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(id = 0L)), password)
+        }
+    }
+
+    @Test fun duplicateIdsAreRejectedBeforeEncoding() {
+        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(duplicate, password)
         }
     }
 
