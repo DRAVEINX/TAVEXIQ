@@ -143,7 +143,7 @@ private fun TavexiqApp(context: Context) {
                                             Spacer(Modifier.width(12.dp))
                                             Column(Modifier.weight(1f)) {
                                                 Text(card.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                                Text(card.format + " • " + maskCode(card.code), color = Muted, fontSize = 13.sp)
+                                                Text(card.format + " • " + LoyaltyCardRules.maskCode(card.code), color = Muted, fontSize = 13.sp)
                                             }
                                             IconButton(onClick = {
                                                 cards = cards.filterNot { it.id == card.id }
@@ -192,15 +192,13 @@ private fun TavexiqApp(context: Context) {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        when {
-                            name.isBlank() -> error = "Vul een kaartnaam in."
-                            code.isBlank() -> error = "Vul een kaartcode in."
-                            code.length > 500 -> error = "De code is te lang (maximaal 500 tekens)."
-                            else -> {
-                                cards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
-                                saveCards(prefs, cards)
-                                showAdd = false
-                            }
+                        val validationError = LoyaltyCardRules.validate(name, code)
+                        if (validationError != null) {
+                            error = validationError
+                        } else {
+                            cards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
+                            saveCards(prefs, cards)
+                            showAdd = false
                         }
                     }) { Text("Opslaan", color = Cyan) }
                 },
@@ -288,4 +286,3 @@ private fun saveCards(prefs: android.content.SharedPreferences, cards: List<Loya
     prefs.edit().putString("cards", array.toString()).apply()
 }
 
-private fun maskCode(value: String): String = if (value.length <= 6) value else "•••• " + value.takeLast(4)
