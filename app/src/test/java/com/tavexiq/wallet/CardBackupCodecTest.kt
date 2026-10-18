@@ -18,6 +18,13 @@ class CardBackupCodecTest {
     }
 
     @Test
+    fun exportTrimsNameAndCodeWhitespace() {
+        val card = LoyaltyCard(1L, "  HEMA  ", "  ABC123  ", "QR", true)
+        assertEquals(LoyaltyCard(1L, "HEMA", "ABC123", "QR", true),
+            CardBackupCodec.decode(CardBackupCodec.encode(listOf(card))).single())
+    }
+
+    @Test
     fun emptyBackupRoundTrips() {
         assertTrue(CardBackupCodec.decode(CardBackupCodec.encode(emptyList())).isEmpty())
     }
@@ -54,6 +61,19 @@ class CardBackupCodecTest {
             LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
             LoyaltyCard(2L, "Second", "same-code", "CODE_128")
         ))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun refusesToExportDuplicateIds() {
+        CardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "CODE-ONE", "QR"),
+            LoyaltyCard(1L, "Second", "CODE-TWO", "QR")
+        ))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun refusesToExportUnsupportedFormat() {
+        CardBackupCodec.encode(listOf(LoyaltyCard(1L, "Test", "ABC123", "MAGIC")))
     }
 
     @Test(expected = IllegalArgumentException::class)
