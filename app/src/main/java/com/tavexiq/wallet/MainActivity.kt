@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +43,7 @@ private val Cyan = Color(0xFF36D9F5)
 private val Silver = Color(0xFFE2EAF3)
 private val Muted = Color(0xFF9CB0C8)
 
-data class LoyaltyCard(val id: Long, val name: String, val code: String, val format: String)
+data class LoyaltyCard(val id: Long, val name: String, val code: String, val format: String, val favorite: Boolean = false)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +68,8 @@ private fun TavexiqApp(context: Context) {
     var code by remember { mutableStateOf("") }
     var format by remember { mutableStateOf("QR") }
     var error by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var favoritesOnly by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
 
     MaterialTheme(colorScheme = darkColorScheme(
@@ -140,28 +144,60 @@ private fun TavexiqApp(context: Context) {
                                 }
                             }
                         } else {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
-                                items(cards, key = { it.id }) { card ->
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth().clickable { selected = card },
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Panel)
-                                    ) {
-                                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Box(Modifier.size(48.dp).background(Color(0xFF173753), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                                                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Cyan, modifier = Modifier.size(28.dp))
+                            Column(Modifier.fillMaxSize()) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    singleLine = true,
+                                    label = { Text("Zoek een klantenkaart") },
+                                    placeholder = { Text("Naam van de winkel") }
+                                )
+                                FilterChip(
+                                    selected = favoritesOnly,
+                                    onClick = { favoritesOnly = !favoritesOnly },
+                                    label = { Text(if (favoritesOnly) "Alleen favorieten" else "Toon favorieten") },
+                                    leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) }
+                                )
+                                val visibleCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
+                                if (visibleCards.isEmpty()) {
+                                    Text(if (favoritesOnly) "Geen favorieten gevonden." else "Geen kaarten gevonden.",
+                                        color = Muted, modifier = Modifier.padding(vertical = 18.dp))
+                                } else {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
+                                        items(visibleCards, key = { it.id }) { card ->
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth().clickable { selected = card },
+                                                shape = RoundedCornerShape(18.dp),
+                                                colors = CardDefaults.cardColors(containerColor = Panel)
+                                            ) {
+                                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(Modifier.size(48.dp).background(Color(0xFF173753), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                                                        Icon(Icons.Default.QrCode2, contentDescription = null, tint = Cyan, modifier = Modifier.size(28.dp))
+                                                    }
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(card.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                                        Text(card.format + " • " + LoyaltyCardRules.maskCode(card.code), color = Muted, fontSize = 13.sp)
+                                                    }
+                                                    IconButton(enabled = storageError == null, onClick = {
+                                                        val updatedCards = cards.map { if (it.id == card.id) it.copy(favorite = !it.favorite) else it }
+                                                        runCatching { storage.saveCards(updatedCards) }
+                                                            .onSuccess { cards = updatedCards }
+                                                            .onFailure { storageError = "Favoriet opslaan is mislukt; bestaande gegevens zijn behouden." }
+                                                    }) {
+                                                        Icon(if (card.favorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                                            contentDescription = if (card.favorite) "Verwijder uit favorieten" else "Markeer als favoriet",
+                                                            tint = if (card.favorite) Cyan else Muted)
+                                                    }
+                                                    IconButton(enabled = storageError == null, onClick = {
+                                                        val updatedCards = cards.filterNot { it.id == card.id }
+                                                        runCatching { storage.saveCards(updatedCards) }
+                                                            .onSuccess { cards = updatedCards }
+                                                            .onFailure { storageError = "Opslaan is mislukt; de bestaande kaartgegevens zijn behouden." }
+                                                    }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
+                                                }
                                             }
-                                            Spacer(Modifier.width(12.dp))
-                                            Column(Modifier.weight(1f)) {
-                                                Text(card.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                                Text(card.format + " • " + LoyaltyCardRules.maskCode(card.code), color = Muted, fontSize = 13.sp)
-                                            }
-                                            IconButton(onClick = {
-                                                val updatedCards = cards.filterNot { it.id == card.id }
-                                                runCatching { storage.saveCards(updatedCards) }
-                                                    .onSuccess { cards = updatedCards }
-                                                    .onFailure { storageError = "Opslaan is mislukt; de bestaande kaartgegevens zijn behouden." }
-                                            }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
                                         }
                                     }
                                 }
