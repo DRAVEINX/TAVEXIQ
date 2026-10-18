@@ -86,6 +86,7 @@ private fun TavexiqApp(context: Context) {
     var backupError by remember { mutableStateOf<String?>(null) }
     var backupPassword by remember { mutableStateOf("") }
     var backupDialogMode by remember { mutableStateOf<String?>(null) }
+    var legacyBackupPending by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
     val exportBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -112,14 +113,24 @@ private fun TavexiqApp(context: Context) {
                 val input = context.contentResolver.openInputStream(uri)
                     ?: error("Het back-upbestand kon niet worden gelezen.")
                 val imported = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val decoded = EncryptedCardBackupCodec.decode(imported, backupPassword.toCharArray())
-                storage.saveCards(decoded)
-                decoded
+                require(imported.length <= 2_000_000) { "Het back-upbestand is te groot." }
+                val root = org.json.JSONObject(imported)
+                if (root.optString("app") == "TAVEXIQ") {
+                    // Legacy backups are plaintext, so require an explicit confirmation before replacing current cards.
+                    legacyBackupPending = CardBackupCodec.decode(imported)
+                    null
+                } else {
+                    val decoded = EncryptedCardBackupCodec.decode(imported, backupPassword.toCharArray())
+                    storage.saveCards(decoded)
+                    decoded
+                }
             }.onSuccess { restored ->
-                cards = restored
-                selected = null
-                backupMessage = "Back-up teruggezet: ${restored.size} kaarten."
-                backupError = null
+                if (restored != null) {
+                    cards = restored
+                    selected = null
+                    backupMessage = "Versleutelde back-up teruggezet: ${restored.size} kaarten."
+                    backupError = null
+                }
             }.onFailure {
                 backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
             }
