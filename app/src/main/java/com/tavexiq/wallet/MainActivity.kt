@@ -72,6 +72,7 @@ private fun TavexiqApp(context: Context) {
     var error by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var sortAlphabetically by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
 
     MaterialTheme(colorScheme = darkColorScheme(
@@ -155,13 +156,25 @@ private fun TavexiqApp(context: Context) {
                                     label = { Text("Zoek een klantenkaart") },
                                     placeholder = { Text("Naam van de winkel") }
                                 )
-                                FilterChip(
-                                    selected = favoritesOnly,
-                                    onClick = { favoritesOnly = !favoritesOnly },
-                                    label = { Text(if (favoritesOnly) "Alleen favorieten" else "Toon favorieten") },
-                                    leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) }
-                                )
-                                val visibleCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FilterChip(
+                                        selected = favoritesOnly,
+                                        onClick = { favoritesOnly = !favoritesOnly },
+                                        label = { Text(if (favoritesOnly) "Alleen favorieten" else "Favorieten") },
+                                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) }
+                                    )
+                                    FilterChip(
+                                        selected = sortAlphabetically,
+                                        onClick = { sortAlphabetically = !sortAlphabetically },
+                                        label = { Text(if (sortAlphabetically) "Naam A–Z" else "Sorteer A–Z") }
+                                    )
+                                }
+                                val filteredCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
+                                val visibleCards = if (sortAlphabetically) filteredCards.sortedBy { it.name.lowercase() } else filteredCards
                                 if (visibleCards.isEmpty()) {
                                     Text(if (favoritesOnly) "Geen favorieten gevonden." else "Geen kaarten gevonden.",
                                         color = Muted, modifier = Modifier.padding(vertical = 18.dp))
