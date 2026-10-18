@@ -238,10 +238,53 @@ private fun TavexiqApp(context: Context) {
                                 backupError?.let { Text(it, color = Color(0xFFFF6B7A), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 val filteredCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
                                 val visibleCards = if (sortAlphabetically) filteredCards.sortedBy { it.name.lowercase() } else filteredCards
-                                if (visibleCards.isEmpty()) {
-                                    Text(if (favoritesOnly) "Geen favorieten gevonden." else "Geen kaarten gevonden.",
-                                        color = Muted, modifier = Modifier.padding(vertical = 18.dp))
-                                } else {
+                                 if (visibleCards.isEmpty()) {
+                                     Column(
+                                         modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp),
+                                         horizontalAlignment = Alignment.CenterHorizontally,
+                                         verticalArrangement = Arrangement.spacedBy(8.dp)
+                                     ) {
+                                         Icon(
+                                             if (favoritesOnly) Icons.Default.StarBorder else Icons.Default.CreditCard,
+                                             contentDescription = null,
+                                             tint = Muted,
+                                             modifier = Modifier.size(36.dp)
+                                         )
+                                         Text(
+                                             when {
+                                                 favoritesOnly && searchQuery.isNotBlank() -> "Geen favorieten gevonden voor deze zoekopdracht."
+                                                 favoritesOnly -> "Je hebt nog geen favorieten."
+                                                 searchQuery.isNotBlank() -> "Geen kaarten gevonden voor deze zoekopdracht."
+                                                 else -> "Je wallet is nog leeg."
+                                             },
+                                             color = Silver,
+                                             fontWeight = FontWeight.SemiBold
+                                         )
+                                         Text(
+                                             when {
+                                                 favoritesOnly -> "Markeer een kaart met de ster om hem hier terug te vinden."
+                                                 searchQuery.isNotBlank() -> "Controleer je zoekterm of wis de zoekbalk."
+                                                 else -> "Voeg een klantenkaart toe om de barcode of QR-code snel bij de hand te hebben."
+                                             },
+                                             color = Muted,
+                                             fontSize = 13.sp,
+                                             lineHeight = 18.sp
+                                         )
+                                         if (searchQuery.isNotBlank() && !favoritesOnly) {
+                                             TextButton(onClick = { searchQuery = "" }) { Text("Zoekopdracht wissen", color = Cyan) }
+                                         }
+                                         if (cards.isEmpty() && searchQuery.isBlank() && !favoritesOnly) {
+                                             Button(onClick = {
+                                                 editingCard = null
+                                                 name = ""
+                                                 code = ""
+                                                 format = "QR"
+                                                 error = ""
+                                                 showAdd = true
+                                             }) { Text("Eerste kaart toevoegen") }
+                                         }
+                                     }
+                                 } else {
                                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
                                         items(visibleCards, key = { it.id }) { card ->
                                             Card(
