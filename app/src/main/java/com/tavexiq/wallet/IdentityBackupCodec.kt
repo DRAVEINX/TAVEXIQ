@@ -69,13 +69,22 @@ internal object IdentityBackupCodec {
         require(lines.size == 5 && lines[0] == PREFIX && lines[1] == VERSION.toString()) {
             "Dit is geen ondersteunde versleutelde TAVEXIQ-ID-back-up."
         }
-        val (salt, iv, encrypted) = try {
-            Triple(
-                Base64.getDecoder().decode(lines[2]),
-                Base64.getDecoder().decode(lines[3]),
-                Base64.getDecoder().decode(lines[4])
-            )
+        val salt = try {
+            Base64.getDecoder().decode(lines[2])
         } catch (_: IllegalArgumentException) {
+            throw IllegalArgumentException("De back-up bevat ongeldige gecodeerde gegevens.")
+        }
+        val iv = try {
+            Base64.getDecoder().decode(lines[3])
+        } catch (_: IllegalArgumentException) {
+            salt.fill(0)
+            throw IllegalArgumentException("De back-up bevat ongeldige gecodeerde gegevens.")
+        }
+        val encrypted = try {
+            Base64.getDecoder().decode(lines[4])
+        } catch (_: IllegalArgumentException) {
+            salt.fill(0)
+            iv.fill(0)
             throw IllegalArgumentException("De back-up bevat ongeldige gecodeerde gegevens.")
         }
         val plaintext = try {
