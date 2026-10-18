@@ -296,7 +296,7 @@ private fun TavexiqApp(context: Context) {
                                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
                                         items(visibleCards, key = { it.id }) { card ->
                                             Card(
-                                                modifier = Modifier.fillMaxWidth().clickable { selected = card },
+                                                modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Kaart ${card.name} openen") { selected = card },
                                                 shape = RoundedCornerShape(18.dp),
                                                 colors = CardDefaults.cardColors(containerColor = Panel)
                                             ) {
@@ -317,7 +317,7 @@ private fun TavexiqApp(context: Context) {
                                                         error = ""
                                                         showAdd = true
                                                     }) {
-                                                        Icon(Icons.Default.Edit, contentDescription = "Kaart bewerken", tint = Cyan)
+                                                        Icon(Icons.Default.Edit, contentDescription = "Kaart ${card.name} bewerken", tint = Cyan)
                                                     }
                                                     IconButton(enabled = storageError == null, onClick = {
                                                         val updatedCards = cards.map { if (it.id == card.id) it.copy(favorite = !it.favorite) else it }
@@ -326,12 +326,12 @@ private fun TavexiqApp(context: Context) {
                                                             .onFailure { storageError = "Favoriet opslaan is mislukt; bestaande gegevens zijn behouden." }
                                                     }) {
                                                         Icon(if (card.favorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                                            contentDescription = if (card.favorite) "Verwijder uit favorieten" else "Markeer als favoriet",
+                                                            contentDescription = if (card.favorite) "${card.name} verwijderen uit favorieten" else "${card.name} markeren als favoriet",
                                                             tint = if (card.favorite) Cyan else Muted)
                                                     }
                                                     IconButton(enabled = storageError == null, onClick = {
                                                          pendingDelete = card
-                                                     }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
+                                                     }) { Icon(Icons.Default.Delete, contentDescription = "Kaart ${card.name} verwijderen", tint = Muted) }
                                                 }
                                             }
                                         }
