@@ -21,6 +21,7 @@ internal object IdentityBackupCodec {
     private const val KEY_BITS = 256
     private const val TAG_BITS = 128
     private const val MAX_DOCUMENTS = 200
+    private const val MAX_BACKUP_CHARS = 1_500_000
     private const val PREFIX = "TAVEXIQ-ID-BACKUP"
 
     fun encode(documents: List<IdentityDocument>, password: CharArray): String {
@@ -50,13 +51,21 @@ internal object IdentityBackupCodec {
     }
 
     fun decode(backup: String, password: CharArray): List<IdentityDocument> {
+        require(password.size >= 8) { "Gebruik een back-upwachtwoord van minimaal 8 tekens." }
+        require(backup.length <= MAX_BACKUP_CHARS) { "De back-up is te groot." }
         val lines = backup.trim().lines()
         require(lines.size == 5 && lines[0] == PREFIX && lines[1] == VERSION.toString()) {
             "Dit is geen ondersteunde versleutelde TAVEXIQ-ID-back-up."
         }
-        val salt = Base64.getDecoder().decode(lines[2])
-        val iv = Base64.getDecoder().decode(lines[3])
-        val encrypted = Base64.getDecoder().decode(lines[4])
+        val (salt, iv, encrypted) = try {
+            Triple(
+                Base64.getDecoder().decode(lines[2]),
+                Base64.getDecoder().decode(lines[3]),
+                Base64.getDecoder().decode(lines[4])
+            )
+        } catch (_: IllegalArgumentException) {
+            throw IllegalArgumentException("De back-up bevat ongeldige gecodeerde gegevens.")
+        }
         require(salt.size == SALT_LENGTH && iv.size == IV_LENGTH && encrypted.size <= 1_000_000) {
             "De back-up is ongeldig of te groot."
         }
