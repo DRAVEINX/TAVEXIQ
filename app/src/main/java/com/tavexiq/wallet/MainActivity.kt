@@ -1,0 +1,291 @@
+package com.tavexiq.wallet
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsTransit
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.MultiFormatWriter
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.EnumMap
+
+private val Navy = Color(0xFF071426)
+private val Panel = Color(0xFF10243D)
+private val Cyan = Color(0xFF36D9F5)
+private val Silver = Color(0xFFE2EAF3)
+private val Muted = Color(0xFF9CB0C8)
+
+data class LoyaltyCard(val id: Long, val name: String, val code: String, val format: String)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { TavexiqApp(this) }
+    }
+}
+
+@Composable
+private fun TavexiqApp(context: Context) {
+    val prefs = remember { context.getSharedPreferences("tavexiq_local", Context.MODE_PRIVATE) }
+    var cards by remember { mutableStateOf(loadCards(prefs)) }
+    var selected by remember { mutableStateOf<LoyaltyCard?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var format by remember { mutableStateOf("QR") }
+    var error by remember { mutableStateOf("") }
+    var tab by remember { mutableIntStateOf(0) }
+
+    MaterialTheme(colorScheme = darkColorScheme(
+        primary = Cyan, onPrimary = Navy, secondary = Silver,
+        background = Navy, surface = Panel, onSurface = Silver,
+        onBackground = Silver, error = Color(0xFFFF6B7A)
+    )) {
+        Scaffold(
+            containerColor = Navy,
+            topBar = {
+                Row(
+                    Modifier.fillMaxWidth().background(Navy).padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(46.dp).background(Cyan, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.CreditCard, contentDescription = null, tint = Navy, modifier = Modifier.size(28.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("TAVEXIQ", fontSize = 25.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                        Text("YOUR EVERYDAY WALLET", color = Muted, fontSize = 10.sp, letterSpacing = 2.sp)
+                    }
+                }
+            },
+            bottomBar = {
+                NavigationBar(containerColor = Panel, contentColor = Silver) {
+                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0; selected = null },
+                        icon = { Icon(Icons.Default.QrCode2, contentDescription = null) }, label = { Text("Kaarten") })
+                    NavigationBarItem(selected = tab == 1, onClick = { tab = 1; selected = null },
+                        icon = { Icon(Icons.Default.DirectionsTransit, contentDescription = null) }, label = { Text("OV") })
+                    NavigationBarItem(selected = tab == 2, onClick = { tab = 2; selected = null },
+                        icon = { Icon(Icons.Default.Security, contentDescription = null) }, label = { Text("Betalen") })
+                }
+            }
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
+                when (tab) {
+                    0 -> if (selected != null) {
+                        CodeDetail(selected!!, onBack = { selected = null })
+                    } else {
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Mijn kaarten", fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                                Text(cards.size.toString() + " opgeslagen kaarten", color = Muted)
+                            }
+                            Button(onClick = { name = ""; code = ""; format = "QR"; error = ""; showAdd = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Toevoegen", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (cards.isEmpty()) {
+                            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.QrCode2, contentDescription = null, tint = Cyan, modifier = Modifier.size(54.dp))
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Je wallet begint hier", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(5.dp))
+                                    Text("Voeg een klantenkaart toe en toon de code bij de kassa.", color = Muted)
+                                    Spacer(Modifier.height(14.dp))
+                                    Button(onClick = { showAdd = true }, colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)) {
+                                        Text("Eerste kaart toevoegen")
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
+                                items(cards, key = { it.id }) { card ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().clickable { selected = card },
+                                        shape = RoundedCornerShape(18.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Panel)
+                                    ) {
+                                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Box(Modifier.size(48.dp).background(Color(0xFF173753), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Cyan, modifier = Modifier.size(28.dp))
+                                            }
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(card.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                                Text(card.format + " • " + maskCode(card.code), color = Muted, fontSize = 13.sp)
+                                            }
+                                            IconButton(onClick = {
+                                                cards = cards.filterNot { it.id == card.id }
+                                                saveCards(prefs, cards)
+                                            }) { Icon(Icons.Default.Delete, contentDescription = "Verwijderen", tint = Muted) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    1 -> FeatureNotice(
+                        icon = { Icon(Icons.Default.DirectionsTransit, contentDescription = null, tint = Cyan, modifier = Modifier.size(42.dp)) },
+                        title = "OV & reizen",
+                        body = "De officiële OV-chipkaart- en OVpay-integratie is nog niet gekoppeld. Hiervoor is ondersteuning en toestemming van de vervoerder nodig.",
+                        note = "TAVEXIQ kopieert of emuleert geen fysieke OV-kaart. Bewaar je fysieke kaart."
+                    )
+                    else -> FeatureNotice(
+                        icon = { Icon(Icons.Default.Security, contentDescription = null, tint = Cyan, modifier = Modifier.size(42.dp)) },
+                        title = "Contactloos betalen",
+                        body = "Contactloze bankbetalingen zijn nog niet actief. Hiervoor zijn een goedgekeurde walletpartner, ondersteuning van de bank en vereiste certificering nodig.",
+                        note = "Voer nooit een pincode, CVC/CVV of volledige betaalkaartgegevens in deze MVP in."
+                    )
+                }
+            }
+        }
+
+        if (showAdd) {
+            AlertDialog(
+                onDismissRequest = { showAdd = false },
+                containerColor = Panel,
+                title = { Text("Klantenkaart toevoegen", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = name, onValueChange = { name = it; error = "" }, label = { Text("Winkel / kaartnaam") }, singleLine = true)
+                        OutlinedTextField(value = code, onValueChange = { code = it; error = "" }, label = { Text("Kaartcode") }, singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
+                        Text("Codeweergave", color = Muted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = format == "QR", onClick = { format = "QR" }, label = { Text("QR-code") })
+                            FilterChip(selected = format == "CODE_128", onClick = { format = "CODE_128" }, label = { Text("Code 128") })
+                        }
+                        if (error.isNotBlank()) Text(error, color = Color(0xFFFF6B7A))
+                        Text("Alleen winkel-/klantenkaartcodes. Geen betaalkaartgegevens.", color = Muted, fontSize = 12.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        when {
+                            name.isBlank() -> error = "Vul een kaartnaam in."
+                            code.isBlank() -> error = "Vul een kaartcode in."
+                            code.length > 500 -> error = "De code is te lang (maximaal 500 tekens)."
+                            else -> {
+                                cards = cards + LoyaltyCard(System.currentTimeMillis(), name.trim(), code.trim(), format)
+                                saveCards(prefs, cards)
+                                showAdd = false
+                            }
+                        }
+                    }) { Text("Opslaan", color = Cyan) }
+                },
+                dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Annuleren", color = Silver) } }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeatureNotice(icon: @Composable () -> Unit, title: String, body: String, note: String) {
+    Column(Modifier.fillMaxWidth().padding(top = 18.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(22.dp)) {
+                icon()
+                Spacer(Modifier.height(16.dp))
+                Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text(body, color = Silver, lineHeight = 22.sp)
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFF2B4058))
+                Spacer(Modifier.height(12.dp))
+                Text(note, color = Muted, fontSize = 13.sp, lineHeight = 19.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeDetail(card: LoyaltyCard, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("← Terug", color = Cyan) }
+            Spacer(Modifier.width(8.dp))
+            Text(card.name, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(24.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                val bitmap = remember(card.code, card.format) { createCodeBitmap(card.code, card.format) }
+                if (bitmap != null) {
+                    Image(bitmap.asImageBitmap(), contentDescription = card.format + " voor " + card.name,
+                        modifier = Modifier.width(280.dp).height(if (card.format == "QR") 280.dp else 120.dp))
+                } else {
+                    Text("Code kan niet worden weergegeven", color = Color.Black)
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Text(card.name, color = Silver, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(card.code, color = Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        Text("Laat deze code bij de kassa scannen.", color = Muted)
+    }
+}
+
+private fun createCodeBitmap(content: String, format: String): Bitmap? = try {
+    val barcodeFormat = if (format == "CODE_128") BarcodeFormat.CODE_128 else BarcodeFormat.QR_CODE
+    val width = if (barcodeFormat == BarcodeFormat.QR_CODE) 420 else 840
+    val height = if (barcodeFormat == BarcodeFormat.QR_CODE) 420 else 300
+    val hints = EnumMap<EncodeHintType, Any>(EncodeHintType::class.java)
+    hints[EncodeHintType.MARGIN] = 1
+    val matrix = MultiFormatWriter().encode(content, barcodeFormat, width, height, hints)
+    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+        for (x in 0 until width) for (y in 0 until height) {
+            bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        }
+    }
+} catch (_: Exception) { null }
+
+private fun loadCards(prefs: android.content.SharedPreferences): List<LoyaltyCard> = try {
+    val array = JSONArray(prefs.getString("cards", "[]"))
+    (0 until array.length()).map { i ->
+        val item = array.getJSONObject(i)
+        LoyaltyCard(item.getLong("id"), item.getString("name"), item.getString("code"), item.getString("format"))
+    }
+} catch (_: Exception) { emptyList() }
+
+private fun saveCards(prefs: android.content.SharedPreferences, cards: List<LoyaltyCard>) {
+    val array = JSONArray()
+    cards.forEach { card ->
+        array.put(JSONObject().put("id", card.id).put("name", card.name).put("code", card.code).put("format", card.format))
+    }
+    prefs.edit().putString("cards", array.toString()).apply()
+}
+
+private fun maskCode(value: String): String = if (value.length <= 6) value else "•••• " + value.takeLast(4)
