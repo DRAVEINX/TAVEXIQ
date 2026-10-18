@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
@@ -24,7 +25,10 @@ internal class EncryptedCardStorage(context: Context) {
     fun loadCards(): List<LoyaltyCard> {
         val encrypted = prefs.getString(ENCRYPTED_KEY, null)
         if (encrypted != null) {
-            return decodeCards(decrypt(encrypted))
+            // Also retry cleanup if an earlier migration/save could not remove the legacy value.
+            val cards = decodeCards(decrypt(encrypted))
+            removeLegacyPlaintext()
+            return cards
         }
 
         // One-time migration for existing installs. Keep the legacy value if encryption fails.
@@ -34,7 +38,7 @@ internal class EncryptedCardStorage(context: Context) {
         check(prefs.edit().putString(ENCRYPTED_KEY, encoded).commit()) {
             "De versleutelde kaartgegevens konden niet worden opgeslagen."
         }
-        prefs.edit().remove(LEGACY_KEY).commit()
+        removeLegacyPlaintext()
         return cards
     }
 
@@ -54,7 +58,15 @@ internal class EncryptedCardStorage(context: Context) {
             "De versleutelde kaartgegevens konden niet worden opgeslagen."
         }
         // Remove any leftover plaintext only after the encrypted write succeeds.
-        prefs.edit().remove(LEGACY_KEY).commit()
+        removeLegacyPlaintext()
+    }
+
+    private fun removeLegacyPlaintext() {
+        if (prefs.contains(LEGACY_KEY)) {
+            check(prefs.edit().remove(LEGACY_KEY).commit()) {
+                "De versleutelde gegevens zijn opgeslagen, maar oude leesbare kaartgegevens konden niet worden verwijderd."
+            }
+        }
     }
 
     private fun encrypt(plainText: String): String {
@@ -66,13 +78,23 @@ internal class EncryptedCardStorage(context: Context) {
     }
 
     private fun decrypt(encoded: String): String {
-        val combined = Base64.decode(encoded, Base64.NO_WRAP)
-        require(combined.size > IV_LENGTH) { "Versleutelde kaartgegevens zijn ongeldig." }
+        val combined = try {
+            Base64.decode(encoded, Base64.NO_WRAP)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException("De versleutelde kaartgegevens zijn ongeldig of beschadigd.")
+        }
+        require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) {
+            "De versleutelde kaartgegevens zijn ongeldig of beschadigd."
+        }
         val iv = combined.copyOfRange(0, IV_LENGTH)
         val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        return String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8)
+        return try {
+            String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8)
+        } catch (_: javax.crypto.AEADBadTagException) {
+            throw IllegalStateException("De versleutelde kaartgegevens konden niet worden gecontroleerd. De gegevens zijn niet overschreven.")
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -90,11 +112,29 @@ internal class EncryptedCardStorage(context: Context) {
     }
 
     private fun decodeCards(json: String): List<LoyaltyCard> {
-        val array = JSONArray(json)
-        return (0 until array.length()).map { i ->
-            val item = array.getJSONObject(i)
-            LoyaltyCard(item.getLong("id"), item.getString("name"), item.getString("code"), item.getString("format"), item.optBoolean("favorite", false))
+        val array = try {
+            JSONArray(json)
+        } catch (_: JSONException) {
+            throw IllegalStateException("De opgeslagen kaartgegevens zijn ongeldig of beschadigd.")
         }
+        require(array.length() <= MAX_CARDS) { "Er zijn te veel opgeslagen kaarten." }
+        val cards = try {
+            (0 until array.length()).map { i ->
+                val item = array.getJSONObject(i)
+                val id = item.getLong("id")
+                val name = item.getString("name").trim()
+                val code = item.getString("code").trim()
+                val format = item.getString("format")
+                require(id > 0L) { "Ongeldige kaart-ID." }
+                require(LoyaltyCardRules.validate(name, code) == null) { "Een opgeslagen kaart bevat ongeldige gegevens." }
+                require(format == "QR" || format == "CODE_128") { "Onbekend opgeslagen codeformaat." }
+                LoyaltyCard(id, name, code, format, item.optBoolean("favorite", false))
+            }
+        } catch (_: JSONException) {
+            throw IllegalStateException("De opgeslagen kaartgegevens zijn ongeldig of beschadigd.")
+        }
+        require(cards.map { it.id }.distinct().size == cards.size) { "Dubbele kaart-ID's in de opgeslagen gegevens." }
+        return cards
     }
 
     private companion object {
@@ -105,5 +145,7 @@ internal class EncryptedCardStorage(context: Context) {
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_LENGTH = 12
         const val TAG_BITS = 128
+        const val TAG_LENGTH_BYTES = TAG_BITS / 8
+        const val MAX_CARDS = 500
     }
 }
