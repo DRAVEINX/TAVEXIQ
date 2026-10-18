@@ -85,6 +85,26 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun decodedSaltAndIvWithInvalidLengthsAreRejected() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        val original = encoded.lines()
+
+        val shortSalt = original.toMutableList().apply {
+            this[2] = java.util.Base64.getEncoder().withoutPadding().encodeToString(byteArrayOf(1, 2, 3))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(shortSalt.joinToString("\n"), password)
+        }
+
+        val shortIv = original.toMutableList().apply {
+            this[3] = java.util.Base64.getEncoder().withoutPadding().encodeToString(byteArrayOf(1, 2, 3))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(shortIv.joinToString("\n"), password)
+        }
+    }
+
+
     @Test fun tooManyDocumentsAreRejectedBeforeEncoding() {
         val tooMany = (1L..201L).map { IdentityDocument(it, "Document $it", "ID", "", "", "") }
         assertThrows(IllegalArgumentException::class.java) {
