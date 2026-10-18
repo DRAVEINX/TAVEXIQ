@@ -1,6 +1,6 @@
 package com.tavexiq.wallet
 
-import android.util.Base64
+import java.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
@@ -45,7 +45,7 @@ internal object IdentityBackupCodec {
             cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
             cipher.updateAAD(PREFIX.toByteArray(StandardCharsets.UTF_8))
             val encrypted = cipher.doFinal(json.toByteArray(StandardCharsets.UTF_8))
-            "$PREFIX\n$VERSION\n${Base64.encodeToString(salt, Base64.NO_WRAP)}\n${Base64.encodeToString(iv, Base64.NO_WRAP)}\n${Base64.encodeToString(encrypted, Base64.NO_WRAP)}"
+            "$PREFIX\n$VERSION\n${Base64.getEncoder().withoutPadding().encodeToString(salt)}\n${Base64.getEncoder().withoutPadding().encodeToString(iv)}\n${Base64.getEncoder().withoutPadding().encodeToString(encrypted)}"
         } finally { key.encoded.fill(0) }
     }
 
@@ -54,9 +54,9 @@ internal object IdentityBackupCodec {
         require(lines.size == 5 && lines[0] == PREFIX && lines[1] == VERSION.toString()) {
             "Dit is geen ondersteunde versleutelde TAVEXIQ-ID-back-up."
         }
-        val salt = Base64.decode(lines[2], Base64.NO_WRAP)
-        val iv = Base64.decode(lines[3], Base64.NO_WRAP)
-        val encrypted = Base64.decode(lines[4], Base64.NO_WRAP)
+        val salt = Base64.getDecoder().decode(lines[2])
+        val iv = Base64.getDecoder().decode(lines[3])
+        val encrypted = Base64.getDecoder().decode(lines[4])
         require(salt.size == SALT_LENGTH && iv.size == IV_LENGTH && encrypted.size <= 1_000_000) {
             "De back-up is ongeldig of te groot."
         }
