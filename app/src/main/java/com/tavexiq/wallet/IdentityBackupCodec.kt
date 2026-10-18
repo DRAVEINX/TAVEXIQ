@@ -45,7 +45,12 @@ internal object IdentityBackupCodec {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
             cipher.updateAAD(PREFIX.toByteArray(StandardCharsets.UTF_8))
-            val encrypted = cipher.doFinal(json.toByteArray(StandardCharsets.UTF_8))
+            val plaintextBytes = json.toByteArray(StandardCharsets.UTF_8)
+            val encrypted = try {
+                cipher.doFinal(plaintextBytes)
+            } finally {
+                plaintextBytes.fill(0)
+            }
             "$PREFIX\n$VERSION\n${Base64.getEncoder().withoutPadding().encodeToString(salt)}\n${Base64.getEncoder().withoutPadding().encodeToString(iv)}\n${Base64.getEncoder().withoutPadding().encodeToString(encrypted)}"
         } finally { key.encoded.fill(0) }
     }
@@ -79,7 +84,11 @@ internal object IdentityBackupCodec {
             throw IllegalArgumentException("Verkeerd back-upwachtwoord of beschadigd bestand.")
         }
         key.encoded.fill(0)
-        val root = JSONObject(String(plaintext, StandardCharsets.UTF_8))
+        val root = try {
+            JSONObject(String(plaintext, StandardCharsets.UTF_8))
+        } finally {
+            plaintext.fill(0)
+        }
         require(root.optString("app") == "TAVEXIQ" && root.optString("kind") == "identity-metadata" &&
             root.optInt("version", -1) == VERSION) { "Deze ID-back-up wordt niet ondersteund." }
         val items = root.getJSONArray("documents")
