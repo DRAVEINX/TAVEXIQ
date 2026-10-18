@@ -1,18 +1,33 @@
 package com.tavexiq.wallet
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class IdentityBackupCodecTest {
     private val sample = listOf(IdentityDocument(42L, "Rijbewijs", "Rijbewijs", "RDW", "31-12-2030", "Voorbeeld"))
+    private val password = "veilig-wachtwoord".toCharArray()
 
-    @Test fun roundTripPreservesMetadata() {
-        val password = "veilig-wachtwoord".toCharArray()
+    @Test fun roundTripPreservesMetadataWithoutExposingPlaintext() {
         val encoded = IdentityBackupCodec.encode(sample, password)
         assertEquals(sample, IdentityBackupCodec.decode(encoded, password))
-        assert(!encoded.contains("Rijbewijs"))
-        assert(!encoded.contains("RDW"))
+        assertFalse(encoded.contains("Rijbewijs"))
+        assertFalse(encoded.contains("RDW"))
+        assertFalse(encoded.contains("Voorbeeld"))
+    }
+
+    @Test fun eachBackupUsesFreshSaltAndIv() {
+        val first = IdentityBackupCodec.encode(sample, password).lines()
+        val second = IdentityBackupCodec.encode(sample, password).lines()
+        assertNotEquals(first[2], second[2])
+        assertNotEquals(first[3], second[3])
+    }
+
+    @Test fun emptyVaultCanBeBackedUpAndRestored() {
+        val encoded = IdentityBackupCodec.encode(emptyList(), password)
+        assertEquals(emptyList<IdentityDocument>(), IdentityBackupCodec.decode(encoded, password))
     }
 
     @Test fun wrongPasswordIsRejected() {
@@ -22,16 +37,52 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun tamperedCiphertextIsRejected() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        val lines = encoded.lines().toMutableList()
+        val encrypted = lines[4]
+        lines[4] = (if (encrypted.first() == 'A') "B" else "A") + encrypted.drop(1)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+        }
+    }
+
+    @Test fun unsupportedHeaderAndTruncatedBackupAreRejected() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode("OTHER-FORMAT\n1\na\nb\nc", password)
+        }
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(encoded.lines().take(4).joinToString("\n"), password)
+        }
+    }
+
     @Test fun shortPasswordIsRejected() {
         assertThrows(IllegalArgumentException::class.java) {
             IdentityBackupCodec.encode(sample, "short".toCharArray())
         }
     }
 
-    @Test fun duplicateIdsAreRejected() {
-        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
+    @Test fun tooManyDocumentsAreRejectedBeforeEncoding() {
+        val tooMany = (1L..201L).map { IdentityDocument(it, "Document $it", "ID", "", "", "") }
         assertThrows(IllegalArgumentException::class.java) {
-            IdentityBackupCodec.decode(IdentityBackupCodec.encode(duplicate, "long-password".toCharArray()), "long-password".toCharArray())
+            IdentityBackupCodec.encode(tooMany, password)
+        }
+    }
+
+    @Test fun invalidExpiryDateIsRejectedOnRestore() {
+        val invalidDate = listOf(sample.first().copy(expiryDate = "31-02-2030"))
+        val encoded = IdentityBackupCodec.encode(invalidDate, password)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(encoded, password)
+        }
+    }
+
+    @Test fun duplicateIdsAreRejectedOnRestore() {
+        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
+        val encoded = IdentityBackupCodec.encode(duplicate, password)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(encoded, password)
         }
     }
 }
