@@ -1,5 +1,6 @@
 package com.tavexiq.wallet
 
+import org.json.JSONException
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.GeneralSecurityException
@@ -63,7 +64,11 @@ internal object EncryptedCardBackupCodec {
         require(envelope.length <= MAX_BACKUP_CHARS) { "Het back-upbestand is te groot." }
         require(password.size >= MIN_PASSWORD_LENGTH) { "Het back-upwachtwoord is ongeldig." }
 
-        val root = JSONObject(envelope)
+        val root = try {
+            JSONObject(envelope)
+        } catch (_: JSONException) {
+            throw IllegalArgumentException("Het back-upbestand is geen geldige JSON of is beschadigd.")
+        }
         require(root.optString("app") == APP_ID) { "Dit is geen versleutelde TAVEXIQ-back-up." }
         require(root.optInt("version", -1) == FORMAT_VERSION) { "Deze back-upversie wordt niet ondersteund." }
         require(root.optString("kdf") == KDF && root.optInt("iterations", -1) == KDF_ITERATIONS) {
@@ -71,10 +76,10 @@ internal object EncryptedCardBackupCodec {
         }
         require(root.optString("cipher") == "AES-256-GCM") { "Het versleutelingsformaat wordt niet ondersteund." }
 
-        val salt = decodeBase64(root.getString("salt"), SALT_BYTES)
-        val nonce = decodeBase64(root.getString("nonce"), NONCE_BYTES)
+        val salt = decodeBase64(requiredString(root, "salt"), SALT_BYTES)
+        val nonce = decodeBase64(requiredString(root, "nonce"), NONCE_BYTES)
         val ciphertext = try {
-            Base64.getDecoder().decode(root.getString("ciphertext"))
+            Base64.getDecoder().decode(requiredString(root, "ciphertext"))
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Het back-upbestand is beschadigd.")
         }
@@ -91,7 +96,19 @@ internal object EncryptedCardBackupCodec {
             throw IllegalArgumentException("De back-up kon niet veilig worden ontsleuteld.")
         }
 
-        return CardBackupCodec.decode(String(plaintext, StandardCharsets.UTF_8))
+        return try {
+            CardBackupCodec.decode(String(plaintext, StandardCharsets.UTF_8))
+        } catch (_: JSONException) {
+            throw IllegalArgumentException("De inhoud van de back-up is beschadigd.")
+        }
+    }
+
+    private fun requiredString(root: JSONObject, key: String): String {
+        return try {
+            root.getString(key)
+        } catch (_: JSONException) {
+            throw IllegalArgumentException("Het back-upbestand mist een verplicht veld of is beschadigd.")
+        }
     }
 
     private fun deriveKey(password: CharArray, salt: ByteArray): SecretKeySpec {
