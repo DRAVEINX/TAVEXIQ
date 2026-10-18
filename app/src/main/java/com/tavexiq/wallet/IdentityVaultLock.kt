@@ -1,6 +1,7 @@
 package com.tavexiq.wallet
 
 import android.content.Context
+import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
@@ -38,11 +39,15 @@ internal fun IdentityVaultLock(context: Context, content: @Composable () -> Unit
         return
     }
 
-    val canAuthenticate = remember(activity) {
-        activity != null && BiometricManager.from(activity).canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        ) == BiometricManager.BIOMETRIC_SUCCESS
+    val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    } else {
+        // Android 10 and earlier cannot combine strong biometrics and device credentials in one prompt.
+        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    }
+    val canAuthenticate = remember(activity, authenticators) {
+        activity != null && BiometricManager.from(activity).canAuthenticate(authenticators) ==
+            BiometricManager.BIOMETRIC_SUCCESS
     }
 
     Column(
@@ -95,10 +100,7 @@ internal fun IdentityVaultLock(context: Context, content: @Composable () -> Unit
                             val promptInfo = BiometricPrompt.PromptInfo.Builder()
                                 .setTitle("TAVEXIQ ID-kluis")
                                 .setSubtitle("Bevestig je identiteit om verder te gaan")
-                                .setAllowedAuthenticators(
-                                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
-                                )
+                                .setAllowedAuthenticators(authenticators)
                                 .build()
                             prompt.authenticate(promptInfo)
                         }
