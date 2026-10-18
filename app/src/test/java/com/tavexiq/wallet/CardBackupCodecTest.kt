@@ -83,4 +83,24 @@ class CardBackupCodecTest {
             .toString()
         CardBackupCodec.decode(json)
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMalformedJsonWithConsistentException() {
+        CardBackupCodec.decode("{not-json")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingCardsArray() {
+        CardBackupCodec.decode("""{"app":"TAVEXIQ","version":1}""")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsCardWithMissingRequiredField() {
+        CardBackupCodec.decode("""{"app":"TAVEXIQ","version":1,"cards":[{"id":1,"name":"Test","format":"QR"}]}""")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsNonObjectCardEntry() {
+        CardBackupCodec.decode("""{"app":"TAVEXIQ","version":1,"cards":["not-a-card"]}""")
+    }
 }
