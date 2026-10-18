@@ -1,6 +1,7 @@
 package com.tavexiq.wallet
 
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -30,6 +31,14 @@ internal object CardBackupCodec {
     }
 
     fun decode(json: String): List<LoyaltyCard> {
+        return try {
+            decodeValidated(json)
+        } catch (_: JSONException) {
+            throw IllegalArgumentException("Het back-upbestand is ongeldig of beschadigd.")
+        }
+    }
+
+    private fun decodeValidated(json: String): List<LoyaltyCard> {
         val root = JSONObject(json)
         require(root.optString("app") == "TAVEXIQ") { "Dit bestand is geen TAVEXIQ-back-up." }
         require(root.optInt("version", -1) == VERSION) { "Deze back-upversie wordt niet ondersteund." }
