@@ -53,11 +53,12 @@ private val IdSilver = Color(0xFFE2EAF3)
 @Composable
 internal fun IdentityVaultScreen(context: Context) {
     val storage = remember { EncryptedIdentityStorage(context) }
+    val initialLoad = remember(storage) { runCatching { storage.load() } }
     var documents by remember {
-        mutableStateOf(runCatching { storage.load() }.getOrElse { emptyList() })
+        mutableStateOf(initialLoad.getOrElse { emptyList() })
     }
     var storageFailed by remember {
-        mutableStateOf(runCatching { storage.load() }.isFailure)
+        mutableStateOf(initialLoad.isFailure)
     }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<IdentityDocument?>(null) }
