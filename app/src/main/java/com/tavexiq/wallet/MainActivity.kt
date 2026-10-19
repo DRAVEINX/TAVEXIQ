@@ -1,6 +1,8 @@
 package com.tavexiq.wallet
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
@@ -394,14 +396,24 @@ private fun TavexiqApp(context: Context) {
                     1 -> FeatureNotice(
                         icon = { Icon(Icons.Default.DirectionsTransit, contentDescription = null, tint = Cyan, modifier = Modifier.size(42.dp)) },
                         title = "OV & reizen",
-                        body = "De officiële OV-chipkaart- en OVpay-integratie is nog niet gekoppeld. Hiervoor is ondersteuning en toestemming van de vervoerder nodig.",
-                        note = "TAVEXIQ kopieert of emuleert geen fysieke OV-kaart. Bewaar je fysieke kaart."
+                        body = "Je kunt je OV-chipkaart nog niet in TAVEXIQ zetten of met deze app in- en uitchecken. Daarvoor is een officiële koppeling met toestemming van de vervoerder nodig.",
+                        note = "Gebruik voorlopig je fysieke OV-chipkaart of een ondersteunde OVpay-betaalpas/telefoon rechtstreeks bij de paal. Gebruik dezelfde pas of hetzelfde apparaat voor in- én uitchecken.",
+                        actions = listOf(
+                            "OVpay: reizen en in-/uitchecken" to "https://www.ovpay.nl/",
+                            "OVpay: de nieuwe OV-pas" to "https://www.ovpay.nl/ov-pas",
+                            "OV-chipkaart: informatie over OVpay" to "https://www.ov-chipkaart.nl/ovpay"
+                        ),
+                        context = context
                     )
                     2 -> FeatureNotice(
                         icon = { Icon(Icons.Default.Security, contentDescription = null, tint = Cyan, modifier = Modifier.size(42.dp)) },
                         title = "Contactloos betalen",
-                        body = "Contactloze bankbetalingen zijn nog niet actief. Hiervoor zijn een goedgekeurde walletpartner, ondersteuning van de bank en vereiste certificering nodig.",
-                        note = "Voer nooit een pincode, CVC/CVV of volledige betaalkaartgegevens in deze MVP in."
+                        body = "TAVEXIQ kan op dit moment geen bankpas opslaan als betaalmiddel en voert zelf geen contactloze betalingen uit. Dit vereist een goedgekeurde wallet, bankondersteuning en beveiligde tokenisatie.",
+                        note = "Voer nooit je pincode, CVC/CVV of volledige betaalkaartgegevens in TAVEXIQ in. Je kunt Google Wallet apart instellen als je bank en kaart worden ondersteund.",
+                        actions = listOf(
+                            "Google Wallet: contactloos betalen instellen" to "https://support.google.com/wallet/answer/12060043?hl=nl"
+                        ),
+                        context = context
                     )
                     else -> IdentityVaultLock(context) { IdentityVaultScreen(context) }
                 }
@@ -634,19 +646,38 @@ private fun TavexiqApp(context: Context) {
 }
 
 @Composable
-private fun FeatureNotice(icon: @Composable () -> Unit, title: String, body: String, note: String) {
+private fun FeatureNotice(
+    icon: @Composable () -> Unit,
+    title: String,
+    body: String,
+    note: String,
+    actions: List<Pair<String, String>>,
+    context: Context
+) {
     Column(Modifier.fillMaxWidth().padding(top = 18.dp)) {
         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(22.dp)) {
+            Column(
+                Modifier.fillMaxWidth().padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 icon()
-                Spacer(Modifier.height(16.dp))
                 Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
                 Text(body, color = Silver, lineHeight = 22.sp)
-                Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = Color(0xFF2B4058))
-                Spacer(Modifier.height(12.dp))
                 Text(note, color = Muted, fontSize = 13.sp, lineHeight = 19.sp)
+                actions.forEach { (label, url) ->
+                    Button(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Navy)
+                    ) {
+                        Text(label, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }
