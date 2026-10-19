@@ -95,7 +95,10 @@ internal object EncryptedCardBackupCodec {
         val encodedNonce = requiredString(root, "nonce")
         val encodedCiphertext = requiredString(root, "ciphertext")
         // Validate encoded lengths before Base64 decoding allocates byte arrays.
-        require(encodedSalt.length <= 64 && encodedNonce.length <= 64) {
+        require(
+            encodedSalt.length <= 64 && encodedNonce.length <= 64 &&
+                encodedSalt.length % 4 == 0 && encodedNonce.length % 4 == 0
+        ) {
             "Het back-upbestand is beschadigd."
         }
         require(encodedCiphertext.length <= MAX_BACKUP_CHARS) {
