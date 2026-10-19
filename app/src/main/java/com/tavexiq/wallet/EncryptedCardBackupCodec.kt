@@ -35,8 +35,9 @@ internal object EncryptedCardBackupCodec {
     private const val APP_ID = "TAVEXIQ_ENCRYPTED_BACKUP"
 
     fun encode(cards: List<LoyaltyCard>, password: CharArray): String {
+        val passwordCopy = password.copyOf()
         try {
-            require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
+            require(passwordCopy.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
                 "Gebruik voor de back-up een wachtwoord van 8 tot 1024 tekens."
             }
 
@@ -44,7 +45,7 @@ internal object EncryptedCardBackupCodec {
             val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
             val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
             try {
-                val key = deriveKey(password, salt)
+                val key = deriveKey(passwordCopy, salt)
                 val cipher = Cipher.getInstance(TRANSFORMATION)
                 cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, nonce))
                 cipher.updateAAD(aad(FORMAT_VERSION))
@@ -81,8 +82,8 @@ internal object EncryptedCardBackupCodec {
                 nonce.fill(0)
             }
         } finally {
-            // Always clear the caller-provided password buffer, including validation failures.
-            password.fill('\u0000')
+            // Clear the codec-owned copy without mutating the caller's password buffer.
+            passwordCopy.fill('\u0000')
         }
     }
 
