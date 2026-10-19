@@ -98,7 +98,7 @@ private fun TavexiqApp(context: Context) {
                 val json = try {
                     EncryptedCardBackupCodec.encode(cards, passwordChars)
                 } finally {
-                    passwordChars.fill('\\u0000')
+                    passwordChars.fill('\u0000')
                 }
                 val output = context.contentResolver.openOutputStream(uri)
                     ?: error("Het back-upbestand kon niet worden geopend.")
@@ -435,7 +435,7 @@ private fun TavexiqApp(context: Context) {
                                         )
                                     }
                                 } finally {
-                                    passwordChars.fill('\\u0000')
+                                    passwordChars.fill('\u0000')
                                 }
                                 decoded.onSuccess { restored ->
                                     pendingCardRestore = restored
