@@ -127,8 +127,10 @@ internal object EncryptedCardBackupCodec {
         } catch (_: GeneralSecurityException) {
             throw IllegalArgumentException("De back-up kon niet veilig worden ontsleuteld.")
         } finally {
-            // Clear the temporary encrypted payload after decryption, including failure paths.
+            // Clear temporary cryptographic buffers after decryption, including failure paths.
             ciphertext.fill(0)
+            salt.fill(0)
+            nonce.fill(0)
         }
 
         return try {
