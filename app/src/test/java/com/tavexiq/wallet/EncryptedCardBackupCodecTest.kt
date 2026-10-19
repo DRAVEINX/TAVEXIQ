@@ -145,6 +145,15 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun acceptsMinimumPasswordLength() {
+        val minimumPassword = "12345678".toCharArray()
+        val backup = EncryptedCardBackupCodec.encode(cards, minimumPassword)
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, minimumPassword))
+        minimumPassword.fill(0.toChar())
+    }
+
+    @Test
     fun acceptsMaximumPasswordLength() {
         val maximumPassword = "x".repeat(1_024).toCharArray()
         val backup = EncryptedCardBackupCodec.encode(cards, maximumPassword)
