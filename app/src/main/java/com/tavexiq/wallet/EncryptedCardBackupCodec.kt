@@ -91,13 +91,18 @@ internal object EncryptedCardBackupCodec {
         }
         require(root.optString("cipher") == "AES-256-GCM") { "Het versleutelingsformaat wordt niet ondersteund." }
 
-        val salt = decodeBase64(requiredString(root, "salt"), SALT_BYTES)
-        val nonce = decodeBase64(requiredString(root, "nonce"), NONCE_BYTES)
+        val encodedSalt = requiredString(root, "salt")
+        val encodedNonce = requiredString(root, "nonce")
         val encodedCiphertext = requiredString(root, "ciphertext")
-        // Reject oversized payload text before allocating a decoded byte array.
+        // Validate encoded lengths before Base64 decoding allocates byte arrays.
+        require(encodedSalt.length <= 64 && encodedNonce.length <= 64) {
+            "Het back-upbestand is beschadigd."
+        }
         require(encodedCiphertext.length <= MAX_BACKUP_CHARS) {
             "Het back-upbestand is te groot."
         }
+        val salt = decodeBase64(encodedSalt, SALT_BYTES)
+        val nonce = decodeBase64(encodedNonce, NONCE_BYTES)
         val ciphertext = try {
             Base64.getDecoder().decode(encodedCiphertext)
         } catch (_: IllegalArgumentException) {
