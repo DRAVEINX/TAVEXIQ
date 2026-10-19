@@ -119,8 +119,19 @@ private fun TavexiqApp(context: Context) {
             runCatching {
                 val input = context.contentResolver.openInputStream(uri)
                     ?: error("Het back-upbestand kon niet worden gelezen.")
-                val imported = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                require(imported.length <= 2_000_000) { "Het back-upbestand is te groot." }
+                val imported = input.bufferedReader(Charsets.UTF_8).use { reader ->
+                    val result = StringBuilder()
+                    val buffer = CharArray(8_192)
+                    while (true) {
+                        val count = reader.read(buffer)
+                        if (count < 0) break
+                        require(result.length + count <= 2_000_000) {
+                            "Het back-upbestand is te groot."
+                        }
+                        result.append(buffer, 0, count)
+                    }
+                    result.toString()
+                }
                 val root = org.json.JSONObject(imported)
                 if (root.optString("app") == "TAVEXIQ") {
                     // Legacy backups are plaintext, so require an explicit confirmation before replacing current cards.
