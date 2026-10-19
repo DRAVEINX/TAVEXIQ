@@ -176,6 +176,23 @@ class EncryptedCardBackupCodecTest {
         )
     }
 
+    @Test
+    fun rejectsCiphertextTruncatedByOneByte() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val ciphertext = Base64.getDecoder().decode(root.getString("ciphertext"))
+        val truncated = ciphertext.copyOf(ciphertext.size - 1)
+        root.put("ciphertext", Base64.getEncoder().encodeToString(truncated))
+        ciphertext.fill(0)
+        truncated.fill(0)
+
+        try {
+            EncryptedCardBackupCodec.decode(root.toString(), password)
+            throw AssertionError("Expected truncated ciphertext to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: GCM authentication must reject truncated ciphertext.
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsWrongPassword() {
         EncryptedCardBackupCodec.decode(
