@@ -20,8 +20,10 @@ internal class EncryptedIdentityStorage(context: Context) {
     @Synchronized
     fun load(): List<IdentityDocument> {
         val encoded = prefs.getString(DATA_KEY, null) ?: return emptyList()
+        require(encoded.length <= MAX_ENCODED_CHARS) { "De opgeslagen kluisgegevens zijn te groot." }
         val array = JSONArray(decrypt(encoded))
-        return (0 until array.length()).map { index ->
+        require(array.length() <= MAX_DOCUMENTS) { "Er zijn te veel documenten in de identiteitskluis." }
+        val documents = (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             IdentityDocument(
                 id = item.getLong("id"),
@@ -32,10 +34,13 @@ internal class EncryptedIdentityStorage(context: Context) {
                 notes = item.optString("notes")
             )
         }
+        validateDocuments(documents)
+        return documents
     }
 
     @Synchronized
     fun save(documents: List<IdentityDocument>) {
+        validateDocuments(documents)
         val array = JSONArray()
         documents.forEach { document ->
             array.put(JSONObject()
@@ -52,21 +57,75 @@ internal class EncryptedIdentityStorage(context: Context) {
         }
     }
 
+    private fun validateDocuments(documents: List<IdentityDocument>) {
+        require(documents.size <= MAX_DOCUMENTS) { "Er zijn te veel documenten in de identiteitskluis." }
+        documents.forEach { document ->
+            require(document.id > 0L) { "Ongeldige document-ID." }
+            require(document.name.isNotBlank() && document.name.length <= MAX_FIELD_LENGTH) {
+                "De documentnaam is ongeldig."
+            }
+            require(document.type.isNotBlank() && document.type.length <= MAX_FIELD_LENGTH) {
+                "Het documenttype is ongeldig."
+            }
+            require(document.issuer.length <= MAX_FIELD_LENGTH &&
+                document.expiryDate.length <= MAX_FIELD_LENGTH &&
+                document.notes.length <= MAX_FIELD_LENGTH) {
+                "Een documentveld is te lang."
+            }
+            require(IdentityDocumentRules.validateExpiryDate(document.expiryDate)) {
+                "De vervaldatum moet de vorm dd-MM-jjjj hebben."
+            }
+        }
+        require(documents.map { it.id }.distinct().size == documents.size) {
+            "Dubbele document-ID's in de identiteitskluis."
+        }
+    }
+
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        val bytes = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
-        return Base64.encodeToString(cipher.iv + bytes, Base64.NO_WRAP)
+        val plaintext = value.toByteArray(StandardCharsets.UTF_8)
+        val ciphertext = try {
+            cipher.doFinal(plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
+        val combined = cipher.iv + ciphertext
+        return try {
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        } finally {
+            combined.fill(0)
+            ciphertext.fill(0)
+        }
     }
 
     private fun decrypt(value: String): String {
-        val combined = Base64.decode(value, Base64.NO_WRAP)
-        require(combined.size > IV_LENGTH) { "De opgeslagen kluisgegevens zijn ongeldig." }
-        val iv = combined.copyOfRange(0, IV_LENGTH)
-        val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        return String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8)
+        require(value.length <= MAX_ENCODED_CHARS) { "De opgeslagen kluisgegevens zijn te groot." }
+        val combined = try {
+            Base64.decode(value, Base64.NO_WRAP)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException("De opgeslagen kluisgegevens zijn ongeldig.")
+        }
+        try {
+            require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) { "De opgeslagen kluisgegevens zijn ongeldig." }
+            val iv = combined.copyOfRange(0, IV_LENGTH)
+            val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
+            try {
+                val cipher = Cipher.getInstance(TRANSFORMATION)
+                cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+                val plaintext = cipher.doFinal(ciphertext)
+                return try {
+                    String(plaintext, StandardCharsets.UTF_8)
+                } finally {
+                    plaintext.fill(0)
+                }
+            } finally {
+                iv.fill(0)
+                ciphertext.fill(0)
+            }
+        } finally {
+            combined.fill(0)
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -89,5 +148,9 @@ internal class EncryptedIdentityStorage(context: Context) {
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_LENGTH = 12
         const val TAG_BITS = 128
+        const val TAG_LENGTH_BYTES = TAG_BITS / 8
+        const val MAX_DOCUMENTS = 500
+        const val MAX_FIELD_LENGTH = 2_000
+        const val MAX_ENCODED_CHARS = 2_000_000
     }
 }

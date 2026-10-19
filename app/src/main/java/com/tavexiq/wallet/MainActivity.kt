@@ -84,12 +84,22 @@ private fun TavexiqApp(context: Context) {
     var tab by remember { mutableIntStateOf(0) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
+    var backupPassword by remember { mutableStateOf("") }
+    var backupDialogMode by remember { mutableStateOf<String?>(null) }
+    var legacyBackupPending by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
+    var pendingEncryptedBackupJson by remember { mutableStateOf<String?>(null) }
+    var pendingCardRestore by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
     val exportBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
             runCatching {
-                val json = CardBackupCodec.encode(cards)
+                val passwordChars = backupPassword.toCharArray()
+                val json = try {
+                    EncryptedCardBackupCodec.encode(cards, passwordChars)
+                } finally {
+                    passwordChars.fill('\u0000')
+                }
                 val output = context.contentResolver.openOutputStream(uri)
                     ?: error("Het back-upbestand kon niet worden geopend.")
                 output.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
@@ -97,9 +107,10 @@ private fun TavexiqApp(context: Context) {
                 backupMessage = "Back-up gemaakt. Bewaar het bestand veilig: het bevat je kaartcodes."
                 backupError = null
             }.onFailure {
-                backupError = "Back-up maken is mislukt. Controleer of er voldoende opslagruimte is."
+                backupError = it.message ?: "Versleutelde back-up maken is mislukt."
             }
         }
+        backupPassword = ""
     }
     val importBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -108,17 +119,30 @@ private fun TavexiqApp(context: Context) {
             runCatching {
                 val input = context.contentResolver.openInputStream(uri)
                     ?: error("Het back-upbestand kon niet worden gelezen.")
-                val imported = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val decoded = CardBackupCodec.decode(imported)
-                storage.saveCards(decoded)
-                decoded
-            }.onSuccess { restored ->
-                cards = restored
-                selected = null
-                backupMessage = "Back-up teruggezet: ${restored.size} kaarten."
-                backupError = null
+                val imported = input.bufferedReader(Charsets.UTF_8).use { reader ->
+                    val result = StringBuilder()
+                    val buffer = CharArray(8_192)
+                    while (true) {
+                        val count = reader.read(buffer)
+                        if (count < 0) break
+                        require(result.length + count <= 2_000_000) {
+                            "Het back-upbestand is te groot."
+                        }
+                        result.append(buffer, 0, count)
+                    }
+                    result.toString()
+                }
+                val root = org.json.JSONObject(imported)
+                if (root.optString("app") == "TAVEXIQ") {
+                    // Legacy backups are plaintext, so require an explicit confirmation before replacing current cards.
+                    legacyBackupPending = CardBackupCodec.decode(imported)
+                } else {
+                    // Ask for the password only after the selected file is identified as encrypted.
+                    pendingEncryptedBackupJson = imported
+                    backupDialogMode = "decrypt"
+                }
             }.onFailure {
-                backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
+                backupError = it.message ?: "Back-upbestand kon niet worden gecontroleerd."
             }
         }
     }
@@ -247,16 +271,23 @@ private fun TavexiqApp(context: Context) {
                                 ) {
                                     OutlinedButton(
                                         enabled = storageError == null,
-                                        onClick = { backupError = null; backupMessage = null; exportBackup.launch("TAVEXIQ-backup.json") },
+                                        onClick = { backupError = null; backupMessage = null; backupPassword = ""; backupDialogMode = "export" },
                                         modifier = Modifier.weight(1f)
                                     ) { Text("Back-up maken") }
                                     OutlinedButton(
                                         enabled = storageError == null,
-                                        onClick = { backupError = null; backupMessage = null; importBackup.launch(arrayOf("application/json", "text/json", "text/plain")) },
+                                        onClick = {
+                                        backupError = null
+                                        backupMessage = null
+                                        backupPassword = ""
+                                        pendingEncryptedBackupJson = null
+                                        legacyBackupPending = null
+                                        importBackup.launch(arrayOf("application/json", "text/json", "text/plain"))
+                                    },
                                         modifier = Modifier.weight(1f)
                                     ) { Text("Back-up terugzetten") }
                                 }
-                                Text("Back-ups bevatten kaartcodes in leesbare vorm. Bewaar ze op een veilige plek.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                                Text("Back-ups zijn met je eigen wachtwoord versleuteld. Bewaar dat wachtwoord veilig; zonder wachtwoord kan herstel niet.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
                                 backupMessage?.let { Text(it, color = Cyan, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 backupError?.let { Text(it, color = Color(0xFFFF6B7A), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) }
                                 val filteredCards = filterLoyaltyCards(cards, searchQuery, favoritesOnly)
@@ -376,6 +407,133 @@ private fun TavexiqApp(context: Context) {
             }
         }
 
+        backupDialogMode?.let { mode ->
+            AlertDialog(
+                onDismissRequest = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null },
+                containerColor = Panel,
+                title = { Text(if (mode == "export") "Back-up versleutelen" else "Back-up ontsleutelen", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            if (mode == "export") "Kies een wachtwoord van minimaal 8 tekens. Je hebt dit nodig om de back-up later terug te zetten."
+                            else "Deze back-up is versleuteld. Voer het wachtwoord in waarmee het bestand is gemaakt.",
+                            color = Silver
+                        )
+                        OutlinedTextField(
+                            value = backupPassword,
+                            onValueChange = { if (it.length <= 1_024) backupPassword = it },
+                            label = { Text("Back-upwachtwoord") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = backupPassword.length >= 8,
+                        onClick = {
+                            if (mode == "export") {
+                                backupDialogMode = null
+                                exportBackup.launch("TAVEXIQ-encrypted-backup.json")
+                            } else {
+                                val passwordChars = backupPassword.toCharArray()
+                                val decoded = try {
+                                    runCatching {
+                                        EncryptedCardBackupCodec.decode(
+                                            pendingEncryptedBackupJson ?: error("Selecteer opnieuw het back-upbestand."),
+                                            passwordChars
+                                        )
+                                    }
+                                } finally {
+                                    passwordChars.fill('\u0000')
+                                }
+                                decoded.onSuccess { restored ->
+                                    pendingCardRestore = restored
+                                    backupError = null
+                                    backupMessage = "Back-up gecontroleerd. Bevestig hieronder om je huidige kaarten te vervangen."
+                                    pendingEncryptedBackupJson = null
+                                    backupDialogMode = null
+                                    backupPassword = ""
+                                }.onFailure {
+                                    backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
+                                }
+                            }
+                        }
+                    ) { Text(if (mode == "export") "Versleutelen en opslaan" else "Bestand kiezen en herstellen", color = Cyan) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null }) { Text("Annuleren", color = Silver) }
+                }
+            )
+        }
+
+        pendingCardRestore?.let { restored ->
+            AlertDialog(
+                onDismissRequest = { pendingCardRestore = null },
+                containerColor = Panel,
+                title = { Text("Huidige kaarten vervangen?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "De versleutelde back-up is gecontroleerd. Doorgaan vervangt alle ${cards.size} huidige kaart(en) door ${restored.size} kaart(en). Annuleren laat je huidige kaarten intact.",
+                        color = Silver
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        runCatching { storage.saveCards(restored) }
+                            .onSuccess {
+                                cards = restored
+                                selected = null
+                                backupMessage = "Versleutelde back-up teruggezet: ${restored.size} kaarten."
+                                backupError = null
+                                pendingCardRestore = null
+                            }
+                            .onFailure {
+                                backupError = "Herstellen is niet volledig afgerond. Controleer je kaarten voordat je opnieuw probeert."
+                                pendingCardRestore = null
+                            }
+                    }) { Text("Vervangen en herstellen", color = Cyan) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCardRestore = null }) { Text("Annuleren", color = Silver) }
+                }
+            )
+        }
+
+        legacyBackupPending?.let { legacyCards ->
+            AlertDialog(
+                onDismissRequest = { legacyBackupPending = null },
+                containerColor = Panel,
+                title = { Text("Oudere back-up herstellen?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Dit is een oudere, niet-versleutelde TAVEXIQ-back-up met " + legacyCards.size + " kaarten. De kaartcodes staan leesbaar in het bestand. Als je doorgaat, worden je huidige kaarten vervangen. Herstel alleen als je dit bestand vertrouwt.",
+                        color = Silver
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        runCatching { storage.saveCards(legacyCards) }
+                            .onSuccess {
+                                cards = legacyCards
+                                selected = null
+                                backupMessage = "Oudere back-up hersteld: " + legacyCards.size + " kaarten. Maak daarna bij voorkeur een nieuwe versleutelde back-up."
+                                backupError = null
+                                legacyBackupPending = null
+                            }
+                            .onFailure {
+                                backupError = "Herstellen is niet volledig afgerond. Controleer je kaarten voordat je opnieuw probeert."
+                                legacyBackupPending = null
+                            }
+                    }) { Text("Herstellen", color = Cyan) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { legacyBackupPending = null }) { Text("Annuleren", color = Silver) }
+                }
+            )
+        }
+
         if (showAdd) {
             AlertDialog(
                 onDismissRequest = { showAdd = false; editingCard = null },
@@ -421,7 +579,7 @@ private fun TavexiqApp(context: Context) {
                                     showAdd = false
                                     editingCard = null
                                 }
-                                .onFailure { error = "Veilig opslaan is mislukt. Je bestaande kaarten zijn behouden." }
+                                .onFailure { error = "Opslaan is niet volledig afgerond. Controleer je kaarten en back-up voordat je opnieuw probeert." }
                         }
                     }) { Text("Opslaan", color = Cyan) }
                 },
@@ -444,7 +602,7 @@ private fun TavexiqApp(context: Context) {
                                 pendingDelete = null
                             }
                             .onFailure {
-                                storageError = "Verwijderen is mislukt; de bestaande kaartgegevens zijn behouden."
+                                storageError = "Verwijderen is niet volledig afgerond. Controleer je kaarten en back-up voordat je opnieuw probeert."
                                 pendingDelete = null
                             }
                     }) { Text("Verwijderen", color = Color(0xFFFF6B7A)) }

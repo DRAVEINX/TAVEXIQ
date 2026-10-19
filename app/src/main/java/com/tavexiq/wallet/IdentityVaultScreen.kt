@@ -53,11 +53,12 @@ private val IdSilver = Color(0xFFE2EAF3)
 @Composable
 internal fun IdentityVaultScreen(context: Context) {
     val storage = remember { EncryptedIdentityStorage(context) }
+    val initialLoad = remember(storage) { runCatching { storage.load() } }
     var documents by remember {
-        mutableStateOf(runCatching { storage.load() }.getOrElse { emptyList() })
+        mutableStateOf(initialLoad.getOrElse { emptyList() })
     }
     var storageFailed by remember {
-        mutableStateOf(runCatching { storage.load() }.isFailure)
+        mutableStateOf(initialLoad.isFailure)
     }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<IdentityDocument?>(null) }
@@ -73,6 +74,7 @@ internal fun IdentityVaultScreen(context: Context) {
     var backupPassword by remember { mutableStateOf("") }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
+    var pendingRestore by remember { mutableStateOf<List<IdentityDocument>?>(null) }
 
     val exportIdentityBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
         if (uri != null) {
@@ -94,13 +96,10 @@ internal fun IdentityVaultScreen(context: Context) {
                 val backup = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                     ?: throw IllegalStateException("Bestand kon niet worden gelezen.")
                 require(backup.length <= 1_500_000) { "Het back-upbestand is te groot." }
-                val restored = IdentityBackupCodec.decode(backup, backupPassword.toCharArray())
-                storage.save(restored)
-                restored
+                IdentityBackupCodec.decode(backup, backupPassword.toCharArray())
             }.onSuccess {
-                documents = it
-                storageFailed = false
-                backupMessage = "ID-kluis hersteld: " + it.size + " documentvermelding(en)."
+                pendingRestore = it
+                backupMessage = "Back-up gecontroleerd. Bevestig hieronder om de huidige ID-kluis te vervangen."
                 backupError = null
             }.onFailure { backupError = it.message ?: "Terugzetten mislukt; de huidige kluis is behouden." }
         }
@@ -243,6 +242,39 @@ internal fun IdentityVaultScreen(context: Context) {
                 }
             }
         }
+    }
+
+    pendingRestore?.let { restored ->
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            containerColor = IdPanel,
+            title = { Text("Huidige ID-kluis vervangen?", color = IdSilver) },
+            text = {
+                Text(
+                    "De back-up is ontsleuteld en gecontroleerd. Doorgaan vervangt alle ${documents.size} huidige documentvermelding(en) door ${restored.size} vermelding(en). Deze actie kan niet ongedaan worden gemaakt. Annuleren laat de huidige kluis intact.",
+                    color = IdMuted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching { storage.save(restored) }
+                        .onSuccess {
+                            documents = restored
+                            storageFailed = false
+                            backupMessage = "ID-kluis hersteld: " + restored.size + " documentvermelding(en)."
+                            backupError = null
+                            pendingRestore = null
+                        }
+                        .onFailure {
+                            backupError = it.message ?: "Terugzetten mislukt; de huidige kluis is behouden."
+                            pendingRestore = null
+                        }
+                }) { Text("Vervangen en herstellen", color = IdCyan) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestore = null }) { Text("Annuleren", color = IdSilver) }
+            }
+        )
     }
 
     backupMode?.let { mode ->

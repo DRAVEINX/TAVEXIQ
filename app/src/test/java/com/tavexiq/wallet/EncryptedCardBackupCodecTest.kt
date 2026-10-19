@@ -1,0 +1,401 @@
+package com.tavexiq.wallet
+
+import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Test
+import java.util.Base64
+import java.util.Locale
+
+class EncryptedCardBackupCodecTest {
+    private val password = "correct horse battery".toCharArray()
+    private val cards = listOf(
+        LoyaltyCard(11L, "HEMA", "12345678", "QR", true),
+        LoyaltyCard(12L, "Albert Heijn", "AH-987", "CODE_128", false)
+    )
+
+    @Test
+    fun encryptedExportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        EncryptedCardBackupCodec.encode(cards, callerPassword)
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+
+    @Test
+    fun failedEncryptedExportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+        val duplicateCards = listOf(
+            LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
+            LoyaltyCard(2L, "Second", "same-code", "CODE_128")
+        )
+
+        try {
+            EncryptedCardBackupCodec.encode(duplicateCards, callerPassword)
+            throw AssertionError("Expected duplicate card codes to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: failed exports must not mutate caller-owned password data.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+
+    @Test
+    fun encryptedExportsUseFreshSaltAndNonce() {
+        val first = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val second = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+
+        assertNotEquals(first.getString("salt"), second.getString("salt"))
+        assertNotEquals(first.getString("nonce"), second.getString("nonce"))
+        assertNotEquals(first.getString("ciphertext"), second.getString("ciphertext"))
+    }
+
+    @Test
+    fun encryptedExportDoesNotIncludePasswordInEnvelope() {
+        val passwordText = "correct horse battery"
+        val backup = EncryptedCardBackupCodec.encode(cards, passwordText.toCharArray())
+
+        assertFalse(backup.contains(passwordText))
+    }
+
+    @Test
+    fun encryptedRoundTripPreservesCardsAndFavorites() {
+        val backup = EncryptedCardBackupCodec.encode(cards, password)
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, password))
+        assertFalse(backup.contains("12345678"))
+        assertFalse(backup.contains("Albert Heijn"))
+    }
+
+    @Test
+    fun encryptedExportTrimsNameAndCodeWhitespace() {
+        val input = listOf(LoyaltyCard(1L, "  HEMA  ", "  ABC123  ", "QR", true))
+        val backup = EncryptedCardBackupCodec.encode(input, password)
+        assertEquals(listOf(LoyaltyCard(1L, "HEMA", "ABC123", "QR", true)),
+            EncryptedCardBackupCodec.decode(backup, password))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun encryptedExportRejectsDuplicateCodesIgnoringCase() {
+        EncryptedCardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
+            LoyaltyCard(2L, "Second", "same-code", "CODE_128")
+        ), password)
+    }
+
+    @Test
+    fun encryptedDuplicateCodeValidationIsIndependentOfDeviceLocale() {
+        val originalLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+            val duplicateCodes = listOf(
+                LoyaltyCard(1L, "First", "ID-CARD", "QR"),
+                LoyaltyCard(2L, "Second", "id-card", "CODE_128")
+            )
+            try {
+                EncryptedCardBackupCodec.encode(duplicateCodes, password)
+                throw AssertionError("Expected duplicate card codes to be rejected")
+            } catch (_: IllegalArgumentException) {
+                // Expected: validation must not depend on the device locale.
+            }
+        } finally {
+            Locale.setDefault(originalLocale)
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun encryptedExportRejectsDuplicateIds() {
+        EncryptedCardBackupCodec.encode(listOf(
+            LoyaltyCard(1L, "First", "CODE-ONE", "QR"),
+            LoyaltyCard(1L, "Second", "CODE-TWO", "QR")
+        ), password)
+    }
+
+    @Test
+    fun roundTripSupportsUnicodeAndSpecialCharacters() {
+        val specialCards = listOf(
+            LoyaltyCard(21L, "Café & Zo", "één-二-🙂", "QR", true),
+            LoyaltyCard(22L, "Winkel \"Noord\"", "A+B/==", "CODE_128", false)
+        )
+        val backup = EncryptedCardBackupCodec.encode(specialCards, password)
+        assertEquals(specialCards, EncryptedCardBackupCodec.decode(backup, password))
+        assertFalse(backup.contains("Café & Zo"))
+        assertFalse(backup.contains("één-二-🙂"))
+    }
+
+    @Test
+    fun emptyWalletCanBeBackedUpAndRestored() {
+        val backup = EncryptedCardBackupCodec.encode(emptyList(), password)
+        assertEquals(emptyList<LoyaltyCard>(), EncryptedCardBackupCodec.decode(backup, password))
+    }
+
+    @Test
+    fun eachExportUsesFreshSaltAndNonce() {
+        val first = EncryptedCardBackupCodec.encode(cards, password)
+        val second = EncryptedCardBackupCodec.encode(cards, password)
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun acceptsMinimumPasswordLength() {
+        val minimumPassword = "12345678".toCharArray()
+        val backup = EncryptedCardBackupCodec.encode(cards, minimumPassword)
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, minimumPassword))
+        minimumPassword.fill(0.toChar())
+    }
+
+    @Test
+    fun acceptsMaximumPasswordLength() {
+        val maximumPassword = "x".repeat(1_024).toCharArray()
+        val backup = EncryptedCardBackupCodec.encode(cards, maximumPassword)
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, maximumPassword))
+        maximumPassword.fill(0.toChar())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsPasswordLongerThanMaximumOnExport() {
+        EncryptedCardBackupCodec.encode(cards, "x".repeat(1_025).toCharArray())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsPasswordLongerThanMaximumOnImport() {
+        EncryptedCardBackupCodec.decode("not parsed because password is too long", "x".repeat(1_025).toCharArray())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsShortPasswordOnExport() {
+        EncryptedCardBackupCodec.encode(cards, "short".toCharArray())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsShortPasswordOnImport() {
+        EncryptedCardBackupCodec.decode(
+            EncryptedCardBackupCodec.encode(cards, password),
+            "short".toCharArray()
+        )
+    }
+
+    @Test
+    fun rejectsCiphertextTruncatedByOneByte() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val ciphertext = Base64.getDecoder().decode(root.getString("ciphertext"))
+        val truncated = ciphertext.copyOf(ciphertext.size - 1)
+        root.put("ciphertext", Base64.getEncoder().encodeToString(truncated))
+        ciphertext.fill(0)
+        truncated.fill(0)
+
+        try {
+            EncryptedCardBackupCodec.decode(root.toString(), password)
+            throw AssertionError("Expected truncated ciphertext to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: GCM authentication must reject truncated ciphertext.
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsWrongPassword() {
+        EncryptedCardBackupCodec.decode(
+            EncryptedCardBackupCodec.encode(cards, password),
+            "incorrect password".toCharArray()
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsTamperedCiphertext() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val bytes = Base64.getDecoder().decode(root.getString("ciphertext"))
+        bytes[0] = (bytes[0].toInt() xor 1).toByte()
+        root.put("ciphertext", Base64.getEncoder().encodeToString(bytes))
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test
+    fun rejectsTamperedAppIdentifier() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("app", "TAVEXIQ_OTHER")
+
+        try {
+            EncryptedCardBackupCodec.decode(root.toString(), password)
+            throw AssertionError("Expected a changed app identifier to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: backup envelope must identify this format and application.
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMalformedSalt() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("salt", "not-valid-base64!")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsSaltWithWrongLength() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("salt", Base64.getEncoder().encodeToString(ByteArray(8)))
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsNonceWithWrongLength() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("nonce", Base64.getEncoder().encodeToString(ByteArray(8)))
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsTamperedNonce() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val nonce = Base64.getDecoder().decode(root.getString("nonce"))
+        nonce[0] = (nonce[0].toInt() xor 1).toByte()
+        root.put("nonce", Base64.getEncoder().encodeToString(nonce))
+        nonce.fill(0)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsTamperedSalt() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val salt = Base64.getDecoder().decode(root.getString("salt"))
+        salt[0] = (salt[0].toInt() xor 1).toByte()
+        root.put("salt", Base64.getEncoder().encodeToString(salt))
+        salt.fill(0)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMalformedCiphertextBase64() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("ciphertext", "not-valid-base64!")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsCiphertextShorterThanGcmTag() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("ciphertext", Base64.getEncoder().encodeToString(ByteArray(15)))
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingSalt() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("salt")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingNonce() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("nonce")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMissingCiphertext() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.remove("ciphertext")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedFormatVersion() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("version", 999)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedKdf() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("kdf", "PBKDF2WithHmacSHA1")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsChangedKdfIterations() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("iterations", 1)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedCipher() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("cipher", "AES-CBC")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsMalformedJson() {
+        EncryptedCardBackupCodec.decode("{not-json", password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsOversizedBackupBeforeParsing() {
+        EncryptedCardBackupCodec.decode(" ".repeat(2_000_001), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsAnotherAppEnvelope() {
+        EncryptedCardBackupCodec.decode("""{"app":"OTHER","version":1}""", password)
+    }
+
+    @Test
+    fun encryptedImportDoesNotMutateCallerPassword() {
+        val backup = EncryptedCardBackupCodec.encode(cards, password)
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, callerPassword))
+        assertArrayEquals(originalPassword, callerPassword)
+
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+
+    @Test
+    fun failedEncryptedImportDoesNotMutateCallerPassword() {
+        val backup = EncryptedCardBackupCodec.encode(cards, password)
+        val callerPassword = "incorrect password".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        try {
+            EncryptedCardBackupCodec.decode(backup, callerPassword)
+            throw AssertionError("Expected a wrong password to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: failed imports must not modify the caller-owned password.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+
+    @Test
+    fun malformedEncryptedImportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        try {
+            EncryptedCardBackupCodec.decode("{not-json", callerPassword)
+            throw AssertionError("Expected malformed backup data to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: early validation failures must not mutate caller-owned data.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+}

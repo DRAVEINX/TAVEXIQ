@@ -57,11 +57,83 @@ class IdentityBackupCodecTest {
         }
     }
 
+    @Test fun unsupportedBackupVersionIsRejectedBeforeDecrypting() {
+        val lines = IdentityBackupCodec.encode(sample, password).lines().toMutableList()
+        lines[1] = "999"
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+        }
+    }
+
+    @Test fun emptyEncryptedFieldsAreRejected() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        for (fieldIndex in 2..4) {
+            val lines = encoded.lines().toMutableList()
+            lines[fieldIndex] = ""
+            assertThrows(IllegalArgumentException::class.java) {
+                IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+            }
+        }
+    }
+
     @Test fun shortPasswordIsRejected() {
         assertThrows(IllegalArgumentException::class.java) {
             IdentityBackupCodec.encode(sample, "short".toCharArray())
         }
     }
+
+    @Test fun shortPasswordIsRejectedOnRestore() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(encoded, "short".toCharArray())
+        }
+    }
+
+    @Test fun oversizedBackupIsRejectedBeforeParsing() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode("x".repeat(1_500_001), password)
+        }
+    }
+
+    @Test fun malformedBase64FieldsAreRejectedClearly() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        val lines = encoded.lines().toMutableList()
+        lines[2] = "not-valid-base64!"
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+        }
+    }
+
+    @Test fun decodedSaltAndIvWithInvalidLengthsAreRejected() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        val original = encoded.lines()
+
+        val shortSalt = original.toMutableList().apply {
+            this[2] = java.util.Base64.getEncoder().withoutPadding().encodeToString(byteArrayOf(1, 2, 3))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(shortSalt.joinToString("\n"), password)
+        }
+
+        val shortIv = original.toMutableList().apply {
+            this[3] = java.util.Base64.getEncoder().withoutPadding().encodeToString(byteArrayOf(1, 2, 3))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.decode(shortIv.joinToString("\n"), password)
+        }
+    }
+
+    @Test fun malformedBase64IsRejectedForEachEncryptedField() {
+        val encoded = IdentityBackupCodec.encode(sample, password)
+        for (fieldIndex in 2..4) {
+            val lines = encoded.lines().toMutableList()
+            lines[fieldIndex] = "not-valid-base64!"
+            assertThrows(IllegalArgumentException::class.java) {
+                IdentityBackupCodec.decode(lines.joinToString("\n"), password)
+            }
+        }
+    }
+
 
     @Test fun tooManyDocumentsAreRejectedBeforeEncoding() {
         val tooMany = (1L..201L).map { IdentityDocument(it, "Document $it", "ID", "", "", "") }
@@ -70,19 +142,39 @@ class IdentityBackupCodecTest {
         }
     }
 
-    @Test fun invalidExpiryDateIsRejectedOnRestore() {
+    @Test fun invalidExpiryDateIsRejectedBeforeEncoding() {
         val invalidDate = listOf(sample.first().copy(expiryDate = "31-02-2030"))
-        val encoded = IdentityBackupCodec.encode(invalidDate, password)
         assertThrows(IllegalArgumentException::class.java) {
-            IdentityBackupCodec.decode(encoded, password)
+            IdentityBackupCodec.encode(invalidDate, password)
         }
     }
 
-    @Test fun duplicateIdsAreRejectedOnRestore() {
-        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
-        val encoded = IdentityBackupCodec.encode(duplicate, password)
+    @Test fun blankDocumentNameIsRejectedBeforeEncoding() {
         assertThrows(IllegalArgumentException::class.java) {
-            IdentityBackupCodec.decode(encoded, password)
+            IdentityBackupCodec.encode(listOf(sample.first().copy(name = "   ")), password)
         }
     }
+
+    @Test fun oversizedMetadataFieldsAreRejectedBeforeEncoding() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(notes = "x".repeat(501))), password)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(type = "x".repeat(81))), password)
+        }
+    }
+
+    @Test fun nonPositiveIdsAreRejectedBeforeEncoding() {
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(listOf(sample.first().copy(id = 0L)), password)
+        }
+    }
+
+    @Test fun duplicateIdsAreRejectedBeforeEncoding() {
+        val duplicate = listOf(sample.first(), sample.first().copy(name = "Paspoort"))
+        assertThrows(IllegalArgumentException::class.java) {
+            IdentityBackupCodec.encode(duplicate, password)
+        }
+    }
+
 }
