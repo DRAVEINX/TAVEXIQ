@@ -126,6 +126,25 @@ class EncryptedCardBackupCodecTest {
         assertNotEquals(first, second)
     }
 
+    @Test
+    fun acceptsMaximumPasswordLength() {
+        val maximumPassword = "x".repeat(1_024).toCharArray()
+        val backup = EncryptedCardBackupCodec.encode(cards, maximumPassword)
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, maximumPassword))
+        maximumPassword.fill('\\u0000')
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsPasswordLongerThanMaximumOnExport() {
+        EncryptedCardBackupCodec.encode(cards, "x".repeat(1_025).toCharArray())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsPasswordLongerThanMaximumOnImport() {
+        EncryptedCardBackupCodec.decode("not parsed because password is too long", "x".repeat(1_025).toCharArray())
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsShortPasswordOnExport() {
         EncryptedCardBackupCodec.encode(cards, "short".toCharArray())
