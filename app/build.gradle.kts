@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val tavexiqKeystorePath = System.getenv("TAVEXIQ_KEYSTORE_PATH")
+val tavexiqKeystorePassword = System.getenv("TAVEXIQ_KEYSTORE_PASSWORD")
+val tavexiqKeyAlias = System.getenv("TAVEXIQ_KEY_ALIAS")
+val tavexiqKeyPassword = System.getenv("TAVEXIQ_KEY_PASSWORD")
+val tavexiqSigningConfigured = listOf(
+    tavexiqKeystorePath,
+    tavexiqKeystorePassword,
+    tavexiqKeyAlias,
+    tavexiqKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.tavexiq.wallet"
     compileSdk = 35
@@ -17,9 +28,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (tavexiqSigningConfigured) {
+            create("release") {
+                storeFile = file(tavexiqKeystorePath!!)
+                storePassword = tavexiqKeystorePassword
+                keyAlias = tavexiqKeyAlias
+                keyPassword = tavexiqKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            if (tavexiqSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
