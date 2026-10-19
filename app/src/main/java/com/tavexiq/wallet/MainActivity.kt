@@ -421,7 +421,7 @@ private fun TavexiqApp(context: Context) {
                         )
                         OutlinedTextField(
                             value = backupPassword,
-                            onValueChange = { backupPassword = it },
+                            onValueChange = { if (it.length <= 1_024) backupPassword = it },
                             label = { Text("Back-upwachtwoord") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
