@@ -94,7 +94,12 @@ private fun TavexiqApp(context: Context) {
     ) { uri ->
         if (uri != null) {
             runCatching {
-                val json = EncryptedCardBackupCodec.encode(cards, backupPassword.toCharArray())
+                val passwordChars = backupPassword.toCharArray()
+                val json = try {
+                    EncryptedCardBackupCodec.encode(cards, passwordChars)
+                } finally {
+                    passwordChars.fill('\\u0000')
+                }
                 val output = context.contentResolver.openOutputStream(uri)
                     ?: error("Het back-upbestand kon niet worden geopend.")
                 output.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
@@ -421,11 +426,16 @@ private fun TavexiqApp(context: Context) {
                                 backupDialogMode = null
                                 exportBackup.launch("TAVEXIQ-encrypted-backup.json")
                             } else {
-                                val decoded = runCatching {
-                                    EncryptedCardBackupCodec.decode(
-                                        pendingEncryptedBackupJson ?: error("Selecteer opnieuw het back-upbestand."),
-                                        backupPassword.toCharArray()
-                                    )
+                                val passwordChars = backupPassword.toCharArray()
+                                val decoded = try {
+                                    runCatching {
+                                        EncryptedCardBackupCodec.decode(
+                                            pendingEncryptedBackupJson ?: error("Selecteer opnieuw het back-upbestand."),
+                                            passwordChars
+                                        )
+                                    }
+                                } finally {
+                                    passwordChars.fill('\\u0000')
                                 }
                                 decoded.onSuccess { restored ->
                                     pendingCardRestore = restored
