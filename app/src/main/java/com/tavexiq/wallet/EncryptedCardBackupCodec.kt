@@ -93,8 +93,13 @@ internal object EncryptedCardBackupCodec {
 
         val salt = decodeBase64(requiredString(root, "salt"), SALT_BYTES)
         val nonce = decodeBase64(requiredString(root, "nonce"), NONCE_BYTES)
+        val encodedCiphertext = requiredString(root, "ciphertext")
+        // Reject oversized payload text before allocating a decoded byte array.
+        require(encodedCiphertext.length <= MAX_BACKUP_CHARS) {
+            "Het back-upbestand is te groot."
+        }
         val ciphertext = try {
-            Base64.getDecoder().decode(requiredString(root, "ciphertext"))
+            Base64.getDecoder().decode(encodedCiphertext)
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Het back-upbestand is beschadigd.")
         }
