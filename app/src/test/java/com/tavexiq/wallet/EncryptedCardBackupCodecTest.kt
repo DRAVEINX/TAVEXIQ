@@ -29,6 +29,27 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun failedEncryptedExportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+        val duplicateCards = listOf(
+            LoyaltyCard(1L, "First", "SAME-CODE", "QR"),
+            LoyaltyCard(2L, "Second", "same-code", "CODE_128")
+        )
+
+        try {
+            EncryptedCardBackupCodec.encode(duplicateCards, callerPassword)
+            throw AssertionError("Expected duplicate card codes to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: failed exports must not mutate caller-owned password data.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
+
+    @Test
     fun encryptedRoundTripPreservesCardsAndFavorites() {
         val backup = EncryptedCardBackupCodec.encode(cards, password)
         assertEquals(cards, EncryptedCardBackupCodec.decode(backup, password))
