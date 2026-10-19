@@ -109,10 +109,16 @@ internal class EncryptedCardStorage(context: Context) {
         val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        return try {
-            String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8)
+        val plaintext = try {
+            cipher.doFinal(ciphertext)
         } catch (_: javax.crypto.AEADBadTagException) {
             throw IllegalStateException("De versleutelde kaartgegevens konden niet worden gecontroleerd. De gegevens zijn niet overschreven.")
+        }
+        return try {
+            String(plaintext, StandardCharsets.UTF_8)
+        } finally {
+            // Clear the temporary decrypted byte array as soon as the String is created.
+            plaintext.fill(0)
         }
     }
 
