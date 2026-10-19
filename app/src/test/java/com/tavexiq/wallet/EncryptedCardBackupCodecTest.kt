@@ -316,6 +316,13 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
+    fun rejectsUnsupportedKdf() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("kdf", "PBKDF2WithHmacSHA1")
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
     fun rejectsChangedKdfIterations() {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         root.put("iterations", 1)
