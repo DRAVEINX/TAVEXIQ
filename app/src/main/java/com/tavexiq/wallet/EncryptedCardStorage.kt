@@ -111,6 +111,10 @@ internal class EncryptedCardStorage(context: Context) {
     }
 
     private fun decrypt(encoded: String): String {
+        // Bound corrupted preference values before Base64 decoding allocates a byte array.
+        require(encoded.length <= MAX_ENCODED_STORAGE_CHARS && encoded.length % 4 == 0) {
+            "De versleutelde kaartgegevens zijn ongeldig of beschadigd."
+        }
         val combined = try {
             Base64.decode(encoded, Base64.NO_WRAP)
         } catch (_: IllegalArgumentException) {
@@ -196,5 +200,6 @@ internal class EncryptedCardStorage(context: Context) {
         const val TAG_BITS = 128
         const val TAG_LENGTH_BYTES = TAG_BITS / 8
         const val MAX_CARDS = 500
+        const val MAX_ENCODED_STORAGE_CHARS = 2_000_000
     }
 }
