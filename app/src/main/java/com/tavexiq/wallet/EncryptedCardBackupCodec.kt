@@ -55,7 +55,7 @@ internal object EncryptedCardBackupCodec {
             plaintext.fill(0)
         }
         return try {
-            JSONObject()
+            val envelope = JSONObject()
                 .put("app", APP_ID)
                 .put("version", FORMAT_VERSION)
                 .put("kdf", KDF)
@@ -65,6 +65,10 @@ internal object EncryptedCardBackupCodec {
                 .put("nonce", Base64.getEncoder().encodeToString(nonce))
                 .put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
                 .toString(2)
+            require(envelope.length <= MAX_BACKUP_CHARS) {
+                "De back-up is te groot om te exporteren."
+            }
+            envelope
         } finally {
             // Clear raw ciphertext once its Base64 representation has been created.
             ciphertext.fill(0)
