@@ -422,12 +422,15 @@ private fun TavexiqApp(context: Context) {
                         )
                         OutlinedTextField(
                             value = backupPassword,
-                            onValueChange = { if (it.length <= 1_024) backupPassword = it },
+                            onValueChange = { if (it.length <= 1_024) { backupPassword = it; backupError = null } },
                             label = { Text("Back-upwachtwoord") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                         )
+                        if (mode == "decrypt" && backupError != null) {
+                            Text(backupError!!, color = Color(0xFFFF6B7A), fontSize = 12.sp)
+                        }
                         if (mode == "export") {
                             OutlinedTextField(
                                 value = backupPasswordConfirmation,
