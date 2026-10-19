@@ -28,14 +28,15 @@ internal object EncryptedCardBackupCodec {
     private const val KEY_BITS = 256
     private const val TAG_BITS = 128
     private const val MIN_PASSWORD_LENGTH = 8
+    private const val MAX_PASSWORD_LENGTH = 1_024
     private const val MAX_BACKUP_CHARS = 2_000_000
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val KDF = "PBKDF2WithHmacSHA256"
     private const val APP_ID = "TAVEXIQ_ENCRYPTED_BACKUP"
 
     fun encode(cards: List<LoyaltyCard>, password: CharArray): String {
-        require(password.size >= MIN_PASSWORD_LENGTH) {
-            "Gebruik voor de back-up een wachtwoord van minimaal 8 tekens."
+        require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
+            "Gebruik voor de back-up een wachtwoord van 8 tot 1024 tekens."
         }
 
         val random = SecureRandom()
@@ -67,7 +68,9 @@ internal object EncryptedCardBackupCodec {
 
     fun decode(envelope: String, password: CharArray): List<LoyaltyCard> {
         require(envelope.length <= MAX_BACKUP_CHARS) { "Het back-upbestand is te groot." }
-        require(password.size >= MIN_PASSWORD_LENGTH) { "Het back-upwachtwoord is ongeldig." }
+        require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
+            "Het back-upwachtwoord moet 8 tot 1024 tekens bevatten."
+        }
 
         val root = try {
             JSONObject(envelope)
