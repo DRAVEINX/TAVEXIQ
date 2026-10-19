@@ -568,7 +568,7 @@ private fun TavexiqApp(context: Context) {
                                     showAdd = false
                                     editingCard = null
                                 }
-                                .onFailure { error = "Veilig opslaan is mislukt. Je bestaande kaarten zijn behouden." }
+                                .onFailure { error = "Opslaan is niet volledig afgerond. Controleer je kaarten en back-up voordat je opnieuw probeert." }
                         }
                     }) { Text("Opslaan", color = Cyan) }
                 },
@@ -591,7 +591,7 @@ private fun TavexiqApp(context: Context) {
                                 pendingDelete = null
                             }
                             .onFailure {
-                                storageError = "Verwijderen is mislukt; de bestaande kaartgegevens zijn behouden."
+                                storageError = "Verwijderen is niet volledig afgerond. Controleer je kaarten en back-up voordat je opnieuw probeert."
                                 pendingDelete = null
                             }
                     }) { Text("Verwijderen", color = Color(0xFFFF6B7A)) }
