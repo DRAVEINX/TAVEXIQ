@@ -239,4 +239,22 @@ class EncryptedCardBackupCodecTest {
         callerPassword.fill('\u0000')
         originalPassword.fill('\u0000')
     }
+
+    @Test
+    fun failedEncryptedImportDoesNotMutateCallerPassword() {
+        val backup = EncryptedCardBackupCodec.encode(cards, password)
+        val callerPassword = "incorrect password".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        try {
+            EncryptedCardBackupCodec.decode(backup, callerPassword)
+            throw AssertionError("Expected a wrong password to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: failed imports must not modify the caller-owned password.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
 }
