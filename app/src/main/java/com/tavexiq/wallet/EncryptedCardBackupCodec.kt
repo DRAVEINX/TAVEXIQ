@@ -115,7 +115,12 @@ internal object EncryptedCardBackupCodec {
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Het back-upbestand is beschadigd.")
         }
-        require(ciphertext.size >= 16) { "Het back-upbestand is beschadigd." }
+        if (ciphertext.size < 16) {
+            ciphertext.fill(0)
+            salt.fill(0)
+            nonce.fill(0)
+            throw IllegalArgumentException("Het back-upbestand is beschadigd.")
+        }
 
         val plaintext = try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -171,7 +176,10 @@ internal object EncryptedCardBackupCodec {
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Het back-upbestand is beschadigd.")
         }
-        require(decoded.size == expectedSize) { "Het back-upbestand is beschadigd." }
+        if (decoded.size != expectedSize) {
+            decoded.fill(0)
+            throw IllegalArgumentException("Het back-upbestand is beschadigd.")
+        }
         return decoded
     }
 
