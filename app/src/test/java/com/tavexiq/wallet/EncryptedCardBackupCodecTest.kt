@@ -257,4 +257,21 @@ class EncryptedCardBackupCodecTest {
         callerPassword.fill('\u0000')
         originalPassword.fill('\u0000')
     }
+
+    @Test
+    fun malformedEncryptedImportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        try {
+            EncryptedCardBackupCodec.decode("{not-json", callerPassword)
+            throw AssertionError("Expected malformed backup data to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: early validation failures must not mutate caller-owned data.
+        }
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
 }
