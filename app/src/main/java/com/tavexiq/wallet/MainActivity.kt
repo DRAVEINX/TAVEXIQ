@@ -469,7 +469,7 @@ private fun TavexiqApp(context: Context) {
                                 pendingCardRestore = null
                             }
                             .onFailure {
-                                backupError = "Herstellen is mislukt. Je huidige kaarten zijn niet gewijzigd."
+                                backupError = "Herstellen is niet volledig afgerond. Controleer je kaarten voordat je opnieuw probeert."
                                 pendingCardRestore = null
                             }
                     }) { Text("Vervangen en herstellen", color = Cyan) }
