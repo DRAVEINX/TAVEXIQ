@@ -103,6 +103,10 @@ internal object EncryptedCardBackupCodec {
         }
         val salt = decodeBase64(encodedSalt, SALT_BYTES)
         val nonce = decodeBase64(encodedNonce, NONCE_BYTES)
+        // Base64 expands bytes by about 4/3; reject impossible payload lengths early.
+        require(encodedCiphertext.length % 4 == 0) {
+            "Het back-upbestand is beschadigd."
+        }
         val ciphertext = try {
             Base64.getDecoder().decode(encodedCiphertext)
         } catch (_: IllegalArgumentException) {
