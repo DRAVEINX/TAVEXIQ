@@ -89,11 +89,23 @@ internal class EncryptedCardStorage(context: Context) {
     }
 
     private fun encrypt(plainText: String): String {
+        val plaintext = plainText.toByteArray(StandardCharsets.UTF_8)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        val encrypted = cipher.doFinal(plainText.toByteArray(StandardCharsets.UTF_8))
+        val encrypted = try {
+            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+            cipher.doFinal(plaintext)
+        } finally {
+            // Clear the temporary UTF-8 representation of the card data.
+            plaintext.fill(0)
+        }
         val combined = cipher.iv + encrypted
-        return Base64.encodeToString(combined, Base64.NO_WRAP)
+        return try {
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        } finally {
+            // Clear temporary encrypted buffers after Base64 serialization.
+            encrypted.fill(0)
+            combined.fill(0)
+        }
     }
 
     private fun decrypt(encoded: String): String {
@@ -102,23 +114,33 @@ internal class EncryptedCardStorage(context: Context) {
         } catch (_: IllegalArgumentException) {
             throw IllegalStateException("De versleutelde kaartgegevens zijn ongeldig of beschadigd.")
         }
-        require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) {
-            "De versleutelde kaartgegevens zijn ongeldig of beschadigd."
-        }
-        val iv = combined.copyOfRange(0, IV_LENGTH)
-        val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-        val plaintext = try {
-            cipher.doFinal(ciphertext)
-        } catch (_: javax.crypto.AEADBadTagException) {
-            throw IllegalStateException("De versleutelde kaartgegevens konden niet worden gecontroleerd. De gegevens zijn niet overschreven.")
-        }
-        return try {
-            String(plaintext, StandardCharsets.UTF_8)
+        try {
+            require(combined.size > IV_LENGTH + TAG_LENGTH_BYTES) {
+                "De versleutelde kaartgegevens zijn ongeldig of beschadigd."
+            }
+            val iv = combined.copyOfRange(0, IV_LENGTH)
+            val ciphertext = combined.copyOfRange(IV_LENGTH, combined.size)
+            try {
+                val cipher = Cipher.getInstance(TRANSFORMATION)
+                cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+                val plaintext = try {
+                    cipher.doFinal(ciphertext)
+                } catch (_: javax.crypto.AEADBadTagException) {
+                    throw IllegalStateException("De versleutelde kaartgegevens konden niet worden gecontroleerd. De gegevens zijn niet overschreven.")
+                }
+                return try {
+                    String(plaintext, StandardCharsets.UTF_8)
+                } finally {
+                    // Clear the temporary decrypted byte array as soon as the String is created.
+                    plaintext.fill(0)
+                }
+            } finally {
+                iv.fill(0)
+                ciphertext.fill(0)
+            }
         } finally {
-            // Clear the temporary decrypted byte array as soon as the String is created.
-            plaintext.fill(0)
+            // Clear the combined Base64-decoded IV and ciphertext on every path.
+            combined.fill(0)
         }
     }
 
