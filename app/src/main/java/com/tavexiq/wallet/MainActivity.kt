@@ -85,6 +85,7 @@ private fun TavexiqApp(context: Context) {
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
     var backupPassword by remember { mutableStateOf("") }
+    var backupPasswordConfirmation by remember { mutableStateOf("") }
     var backupDialogMode by remember { mutableStateOf<String?>(null) }
     var legacyBackupPending by remember { mutableStateOf<List<LoyaltyCard>?>(null) }
     var pendingEncryptedBackupJson by remember { mutableStateOf<String?>(null) }
@@ -110,7 +111,7 @@ private fun TavexiqApp(context: Context) {
                 backupError = it.message ?: "Versleutelde back-up maken is mislukt."
             }
         }
-        backupPassword = ""
+        backupPassword = ""; backupPasswordConfirmation = ""
     }
     val importBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -271,7 +272,7 @@ private fun TavexiqApp(context: Context) {
                                 ) {
                                     OutlinedButton(
                                         enabled = storageError == null,
-                                        onClick = { backupError = null; backupMessage = null; backupPassword = ""; backupDialogMode = "export" },
+                                        onClick = { backupError = null; backupMessage = null; backupPassword = ""; backupPasswordConfirmation = ""; backupDialogMode = "export" },
                                         modifier = Modifier.weight(1f)
                                     ) { Text("Back-up maken") }
                                     OutlinedButton(
@@ -279,7 +280,7 @@ private fun TavexiqApp(context: Context) {
                                         onClick = {
                                         backupError = null
                                         backupMessage = null
-                                        backupPassword = ""
+                                        backupPassword = ""; backupPasswordConfirmation = ""
                                         pendingEncryptedBackupJson = null
                                         legacyBackupPending = null
                                         importBackup.launch(arrayOf("application/json", "text/json", "text/plain"))
@@ -409,7 +410,7 @@ private fun TavexiqApp(context: Context) {
 
         backupDialogMode?.let { mode ->
             AlertDialog(
-                onDismissRequest = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null },
+                onDismissRequest = { backupDialogMode = null; backupPassword = ""; backupPasswordConfirmation = ""; pendingEncryptedBackupJson = null },
                 containerColor = Panel,
                 title = { Text(if (mode == "export") "Back-up versleutelen" else "Back-up ontsleutelen", fontWeight = FontWeight.Bold) },
                 text = {
@@ -427,11 +428,25 @@ private fun TavexiqApp(context: Context) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                         )
+                        if (mode == "export") {
+                            OutlinedTextField(
+                                value = backupPasswordConfirmation,
+                                onValueChange = { if (it.length <= 1_024) backupPasswordConfirmation = it },
+                                label = { Text("Herhaal back-upwachtwoord") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                isError = backupPasswordConfirmation.isNotEmpty() && backupPassword != backupPasswordConfirmation
+                            )
+                            if (backupPasswordConfirmation.isNotEmpty() && backupPassword != backupPasswordConfirmation) {
+                                Text("De wachtwoorden zijn niet hetzelfde.", color = Color(0xFFFF6B7A), fontSize = 12.sp)
+                            }
+                        }
                     }
                 },
                 confirmButton = {
                     TextButton(
-                        enabled = backupPassword.length >= 8,
+                        enabled = backupPassword.length >= 8 && (mode != "export" || backupPassword == backupPasswordConfirmation),
                         onClick = {
                             if (mode == "export") {
                                 backupDialogMode = null
@@ -454,7 +469,7 @@ private fun TavexiqApp(context: Context) {
                                     backupMessage = "Back-up gecontroleerd. Bevestig hieronder om je huidige kaarten te vervangen."
                                     pendingEncryptedBackupJson = null
                                     backupDialogMode = null
-                                    backupPassword = ""
+                                    backupPassword = ""; backupPasswordConfirmation = ""
                                 }.onFailure {
                                     backupError = it.message ?: "Back-up terugzetten is mislukt. Je huidige kaarten zijn niet gewijzigd."
                                 }
@@ -463,7 +478,7 @@ private fun TavexiqApp(context: Context) {
                     ) { Text(if (mode == "export") "Versleutelen en opslaan" else "Bestand kiezen en herstellen", color = Cyan) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { backupDialogMode = null; backupPassword = ""; pendingEncryptedBackupJson = null }) { Text("Annuleren", color = Silver) }
+                    TextButton(onClick = { backupDialogMode = null; backupPassword = ""; backupPasswordConfirmation = ""; pendingEncryptedBackupJson = null }) { Text("Annuleren", color = Silver) }
                 }
             )
         }
