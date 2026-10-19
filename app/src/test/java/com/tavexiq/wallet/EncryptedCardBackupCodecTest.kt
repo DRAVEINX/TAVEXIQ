@@ -226,4 +226,17 @@ class EncryptedCardBackupCodecTest {
     fun rejectsAnotherAppEnvelope() {
         EncryptedCardBackupCodec.decode("""{"app":"OTHER","version":1}""", password)
     }
+
+    @Test
+    fun encryptedImportDoesNotMutateCallerPassword() {
+        val backup = EncryptedCardBackupCodec.encode(cards, password)
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        assertEquals(cards, EncryptedCardBackupCodec.decode(backup, callerPassword))
+        assertArrayEquals(originalPassword, callerPassword)
+
+        callerPassword.fill('\\u0000')
+        originalPassword.fill('\\u0000')
+    }
 }
