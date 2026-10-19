@@ -132,7 +132,7 @@ class EncryptedCardBackupCodecTest {
         val backup = EncryptedCardBackupCodec.encode(cards, maximumPassword)
 
         assertEquals(cards, EncryptedCardBackupCodec.decode(backup, maximumPassword))
-        maximumPassword.fill('\\u0000')
+        maximumPassword.fill(0.toChar())
     }
 
     @Test(expected = IllegalArgumentException::class)
