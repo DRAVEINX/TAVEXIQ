@@ -102,6 +102,9 @@ internal object EncryptedCardBackupCodec {
             throw IllegalArgumentException("Wachtwoord onjuist of back-upbestand beschadigd.")
         } catch (_: GeneralSecurityException) {
             throw IllegalArgumentException("De back-up kon niet veilig worden ontsleuteld.")
+        } finally {
+            // Clear the temporary encrypted payload after decryption, including failure paths.
+            ciphertext.fill(0)
         }
 
         return try {
