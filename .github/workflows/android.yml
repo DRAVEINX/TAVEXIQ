@@ -24,8 +24,45 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Prepare release signing
+        id: signing
+        env:
+          TAVEXIQ_KEYSTORE_BASE64: ${{ secrets.TAVEXIQ_KEYSTORE_BASE64 }}
+          TAVEXIQ_KEYSTORE_PASSWORD: ${{ secrets.TAVEXIQ_KEYSTORE_PASSWORD }}
+          TAVEXIQ_KEY_ALIAS: ${{ secrets.TAVEXIQ_KEY_ALIAS }}
+          TAVEXIQ_KEY_PASSWORD: ${{ secrets.TAVEXIQ_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "$TAVEXIQ_KEYSTORE_BASE64" || -z "$TAVEXIQ_KEYSTORE_PASSWORD" || -z "$TAVEXIQ_KEY_ALIAS" || -z "$TAVEXIQ_KEY_PASSWORD" ]]; then
+            echo "Release signing secrets are incomplete; continuing with an unsigned CI release build."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYSTORE_PATH="$RUNNER_TEMP/tavexiq-upload.jks"
+          printf '%s' "$TAVEXIQ_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "TAVEXIQ_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
       - name: Build APK and AAB
+        env:
+          TAVEXIQ_KEYSTORE_PASSWORD: ${{ secrets.TAVEXIQ_KEYSTORE_PASSWORD }}
+          TAVEXIQ_KEY_ALIAS: ${{ secrets.TAVEXIQ_KEY_ALIAS }}
+          TAVEXIQ_KEY_PASSWORD: ${{ secrets.TAVEXIQ_KEY_PASSWORD }}
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease
+      - name: Verify signed release artifacts
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_PATH="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          AAB_PATH="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit)"
+          test -n "$APK_PATH"
+          test -n "$AAB_PATH"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK_PATH"
+          jarsigner -verify "$AAB_PATH"
+          echo "Signed release APK and AAB verification passed."
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
