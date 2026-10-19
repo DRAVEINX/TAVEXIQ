@@ -54,16 +54,23 @@ internal object EncryptedCardBackupCodec {
             // Clear the serialized card data as soon as encryption has finished.
             plaintext.fill(0)
         }
-        return JSONObject()
-            .put("app", APP_ID)
-            .put("version", FORMAT_VERSION)
-            .put("kdf", KDF)
-            .put("iterations", KDF_ITERATIONS)
-            .put("cipher", "AES-256-GCM")
-            .put("salt", Base64.getEncoder().encodeToString(salt))
-            .put("nonce", Base64.getEncoder().encodeToString(nonce))
-            .put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
-            .toString(2)
+        return try {
+            JSONObject()
+                .put("app", APP_ID)
+                .put("version", FORMAT_VERSION)
+                .put("kdf", KDF)
+                .put("iterations", KDF_ITERATIONS)
+                .put("cipher", "AES-256-GCM")
+                .put("salt", Base64.getEncoder().encodeToString(salt))
+                .put("nonce", Base64.getEncoder().encodeToString(nonce))
+                .put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
+                .toString(2)
+        } finally {
+            // Clear raw ciphertext once its Base64 representation has been created.
+            ciphertext.fill(0)
+            salt.fill(0)
+            nonce.fill(0)
+        }
     }
 
     fun decode(envelope: String, password: CharArray): List<LoyaltyCard> {
