@@ -210,6 +210,19 @@ class EncryptedCardBackupCodecTest {
         EncryptedCardBackupCodec.decode(root.toString(), password)
     }
 
+    @Test
+    fun rejectsTamperedAppIdentifier() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        root.put("app", "TAVEXIQ_OTHER")
+
+        try {
+            EncryptedCardBackupCodec.decode(root.toString(), password)
+            throw AssertionError("Expected a changed app identifier to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: backup envelope must identify this format and application.
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsMalformedSalt() {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
