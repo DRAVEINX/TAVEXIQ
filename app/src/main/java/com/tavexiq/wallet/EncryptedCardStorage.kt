@@ -98,11 +98,13 @@ internal class EncryptedCardStorage(context: Context) {
             // Clear the temporary UTF-8 representation of the card data.
             plaintext.fill(0)
         }
-        val combined = cipher.iv + encrypted
+        val iv = cipher.iv
+        val combined = iv + encrypted
         return try {
             Base64.encodeToString(combined, Base64.NO_WRAP)
         } finally {
-            // Clear temporary encrypted buffers after Base64 serialization.
+            // Clear temporary IV and encrypted buffers after Base64 serialization.
+            iv.fill(0)
             encrypted.fill(0)
             combined.fill(0)
         }
