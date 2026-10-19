@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
@@ -571,6 +573,50 @@ private fun TavexiqApp(context: Context) {
                 title = { Text(if (editingCard == null) "Klantenkaart toevoegen" else "Klantenkaart bewerken", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                error = ""
+                                runCatching {
+                                    GmsBarcodeScanning.getClient(context).startScan()
+                                        .addOnSuccessListener { barcode ->
+                                            val scannedValue = barcode.rawValue
+                                            if (scannedValue.isNullOrBlank()) {
+                                                error = "Geen leesbare code gevonden. Probeer opnieuw met meer licht."
+                                            } else {
+                                                code = scannedValue
+                                                format = when (barcode.format) {
+                                                    Barcode.FORMAT_QR_CODE -> "QR"
+                                                    Barcode.FORMAT_CODE_128 -> "CODE_128"
+                                                    Barcode.FORMAT_EAN_13 -> "EAN_13"
+                                                    Barcode.FORMAT_EAN_8 -> "EAN_8"
+                                                    Barcode.FORMAT_UPC_A -> "UPC_A"
+                                                    Barcode.FORMAT_UPC_E -> "UPC_E"
+                                                    Barcode.FORMAT_CODE_39 -> "CODE_39"
+                                                    Barcode.FORMAT_CODE_93 -> "CODE_93"
+                                                    Barcode.FORMAT_CODABAR -> "CODABAR"
+                                                    Barcode.FORMAT_ITF -> "ITF"
+                                                    Barcode.FORMAT_PDF417 -> "PDF_417"
+                                                    Barcode.FORMAT_AZTEC -> "AZTEC"
+                                                    Barcode.FORMAT_DATA_MATRIX -> "DATA_MATRIX"
+                                                    else -> "QR"
+                                                }
+                                                error = "Code gescand. Controleer de kaartnaam en sla de kaart op."
+                                            }
+                                        }
+                                        .addOnCanceledListener { }
+                                        .addOnFailureListener {
+                                            error = "Scannen is mislukt. Probeer opnieuw of vul de code handmatig in."
+                                        }
+                                }.onFailure {
+                                    error = "Scanner kon niet worden gestart. Controleer Google Play-services en probeer opnieuw."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.QrCode2, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Pasje scannen met camera")
+                        }
                         OutlinedTextField(value = name, onValueChange = { name = it; error = "" }, label = { Text("Winkel / kaartnaam") }, singleLine = true)
                         OutlinedTextField(value = code, onValueChange = { code = it; error = "" }, label = { Text("Kaartcode") }, singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
@@ -736,9 +782,23 @@ private fun CodeDetail(card: LoyaltyCard, onBack: () -> Unit) {
 }
 
 private fun createCodeBitmap(content: String, format: String): Bitmap? = try {
-    val barcodeFormat = if (format == "CODE_128") BarcodeFormat.CODE_128 else BarcodeFormat.QR_CODE
-    val width = if (barcodeFormat == BarcodeFormat.QR_CODE) 420 else 840
-    val height = if (barcodeFormat == BarcodeFormat.QR_CODE) 420 else 300
+    val barcodeFormat = when (format) {
+        "CODE_128" -> BarcodeFormat.CODE_128
+        "EAN_13" -> BarcodeFormat.EAN_13
+        "EAN_8" -> BarcodeFormat.EAN_8
+        "UPC_A" -> BarcodeFormat.UPC_A
+        "UPC_E" -> BarcodeFormat.UPC_E
+        "CODE_39" -> BarcodeFormat.CODE_39
+        "CODE_93" -> BarcodeFormat.CODE_93
+        "CODABAR" -> BarcodeFormat.CODABAR
+        "ITF" -> BarcodeFormat.ITF
+        "PDF_417" -> BarcodeFormat.PDF_417
+        "AZTEC" -> BarcodeFormat.AZTEC
+        "DATA_MATRIX" -> BarcodeFormat.DATA_MATRIX
+        else -> BarcodeFormat.QR_CODE
+    }
+    val width = if (barcodeFormat == BarcodeFormat.QR_CODE || barcodeFormat == BarcodeFormat.AZTEC || barcodeFormat == BarcodeFormat.DATA_MATRIX) 420 else 840
+    val height = if (barcodeFormat == BarcodeFormat.QR_CODE || barcodeFormat == BarcodeFormat.AZTEC || barcodeFormat == BarcodeFormat.DATA_MATRIX) 420 else 300
     val hints = EnumMap<EncodeHintType, Any>(EncodeHintType::class.java)
     hints[EncodeHintType.MARGIN] = 1
     val matrix = MultiFormatWriter().encode(content, barcodeFormat, width, height, hints)
