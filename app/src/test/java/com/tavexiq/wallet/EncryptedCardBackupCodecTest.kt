@@ -60,6 +60,14 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun encryptedExportDoesNotIncludePasswordInEnvelope() {
+        val passwordText = "correct horse battery"
+        val backup = EncryptedCardBackupCodec.encode(cards, passwordText.toCharArray())
+
+        assertFalse(backup.contains(passwordText))
+    }
+
+    @Test
     fun encryptedRoundTripPreservesCardsAndFavorites() {
         val backup = EncryptedCardBackupCodec.encode(cards, password)
         assertEquals(cards, EncryptedCardBackupCodec.decode(backup, password))
