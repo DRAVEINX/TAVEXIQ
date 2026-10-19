@@ -236,7 +236,7 @@ class EncryptedCardBackupCodecTest {
         assertEquals(cards, EncryptedCardBackupCodec.decode(backup, callerPassword))
         assertArrayEquals(originalPassword, callerPassword)
 
-        callerPassword.fill('\\u0000')
-        originalPassword.fill('\\u0000')
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
     }
 }
