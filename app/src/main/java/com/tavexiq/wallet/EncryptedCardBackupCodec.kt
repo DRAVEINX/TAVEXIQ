@@ -42,36 +42,40 @@ internal object EncryptedCardBackupCodec {
         val random = SecureRandom()
         val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
         val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
-        val key = deriveKey(password, salt)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, nonce))
-        cipher.updateAAD(aad(FORMAT_VERSION))
+        try {
+            val key = deriveKey(password, salt)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, nonce))
+            cipher.updateAAD(aad(FORMAT_VERSION))
 
-        val plaintext = CardBackupCodec.encode(cards).toByteArray(StandardCharsets.UTF_8)
-        val ciphertext = try {
-            cipher.doFinal(plaintext)
-        } finally {
-            // Clear the serialized card data as soon as encryption has finished.
-            plaintext.fill(0)
-        }
-        return try {
-            val envelope = JSONObject()
-                .put("app", APP_ID)
-                .put("version", FORMAT_VERSION)
-                .put("kdf", KDF)
-                .put("iterations", KDF_ITERATIONS)
-                .put("cipher", "AES-256-GCM")
-                .put("salt", Base64.getEncoder().encodeToString(salt))
-                .put("nonce", Base64.getEncoder().encodeToString(nonce))
-                .put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
-                .toString(2)
-            require(envelope.length <= MAX_BACKUP_CHARS) {
-                "De back-up is te groot om te exporteren."
+            val plaintext = CardBackupCodec.encode(cards).toByteArray(StandardCharsets.UTF_8)
+            val ciphertext = try {
+                cipher.doFinal(plaintext)
+            } finally {
+                // Clear the serialized card data as soon as encryption has finished.
+                plaintext.fill(0)
             }
-            envelope
+            return try {
+                val envelope = JSONObject()
+                    .put("app", APP_ID)
+                    .put("version", FORMAT_VERSION)
+                    .put("kdf", KDF)
+                    .put("iterations", KDF_ITERATIONS)
+                    .put("cipher", "AES-256-GCM")
+                    .put("salt", Base64.getEncoder().encodeToString(salt))
+                    .put("nonce", Base64.getEncoder().encodeToString(nonce))
+                    .put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
+                    .toString(2)
+                require(envelope.length <= MAX_BACKUP_CHARS) {
+                    "De back-up is te groot om te exporteren."
+                }
+                envelope
+            } finally {
+                // Clear raw ciphertext once its Base64 representation has been created.
+                ciphertext.fill(0)
+            }
         } finally {
-            // Clear raw ciphertext once its Base64 representation has been created.
-            ciphertext.fill(0)
+            // Clear salt and nonce even if key setup, card validation, or encryption fails.
             salt.fill(0)
             nonce.fill(0)
         }
