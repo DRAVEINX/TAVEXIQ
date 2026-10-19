@@ -50,6 +50,16 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test
+    fun encryptedExportsUseFreshSaltAndNonce() {
+        val first = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val second = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+
+        assertNotEquals(first.getString("salt"), second.getString("salt"))
+        assertNotEquals(first.getString("nonce"), second.getString("nonce"))
+        assertNotEquals(first.getString("ciphertext"), second.getString("ciphertext"))
+    }
+
+    @Test
     fun encryptedRoundTripPreservesCardsAndFavorites() {
         val backup = EncryptedCardBackupCodec.encode(cards, password)
         assertEquals(cards, EncryptedCardBackupCodec.decode(backup, password))
