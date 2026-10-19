@@ -197,6 +197,26 @@ class EncryptedCardBackupCodecTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
+    fun rejectsTamperedNonce() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val nonce = Base64.getDecoder().decode(root.getString("nonce"))
+        nonce[0] = (nonce[0].toInt() xor 1).toByte()
+        root.put("nonce", Base64.getEncoder().encodeToString(nonce))
+        nonce.fill(0)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsTamperedSalt() {
+        val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
+        val salt = Base64.getDecoder().decode(root.getString("salt"))
+        salt[0] = (salt[0].toInt() xor 1).toByte()
+        root.put("salt", Base64.getEncoder().encodeToString(salt))
+        salt.fill(0)
+        EncryptedCardBackupCodec.decode(root.toString(), password)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
     fun rejectsMalformedCiphertextBase64() {
         val root = JSONObject(EncryptedCardBackupCodec.encode(cards, password))
         root.put("ciphertext", "not-valid-base64!")
