@@ -1,6 +1,7 @@
 package com.tavexiq.wallet
 
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -14,6 +15,18 @@ class EncryptedCardBackupCodecTest {
         LoyaltyCard(11L, "HEMA", "12345678", "QR", true),
         LoyaltyCard(12L, "Albert Heijn", "AH-987", "CODE_128", false)
     )
+
+    @Test
+    fun encryptedExportDoesNotMutateCallerPassword() {
+        val callerPassword = "correct horse battery".toCharArray()
+        val originalPassword = callerPassword.copyOf()
+
+        EncryptedCardBackupCodec.encode(cards, callerPassword)
+
+        assertArrayEquals(originalPassword, callerPassword)
+        callerPassword.fill('\u0000')
+        originalPassword.fill('\u0000')
+    }
 
     @Test
     fun encryptedRoundTripPreservesCardsAndFavorites() {
